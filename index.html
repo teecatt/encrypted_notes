@@ -32,6 +32,9 @@ tailwind.config={darkMode:"class",theme:{extend:{
 <!-- Theme toggle (always visible, top-right) -->
 <button id="theme-toggle-lock" class="fixed top-3 right-3 z-[60] p-2 rounded-lg text-muted-light dark:text-muted-dark bg-white/80 dark:bg-surface-dark/80 backdrop-blur border border-border-light dark:border-border-dark" title="切换主题"><span class="material-icons text-lg" data-theme-icon>dark_mode</span></button>
 
+<!-- Toast -->
+<div id="toast" class="hidden fixed top-3 left-1/2 -translate-x-1/2 z-[70] px-4 py-2 rounded-lg text-xs shadow-lg border border-border-light dark:border-border-dark bg-white dark:bg-surface-dark text-text-light dark:text-text-dark"></div>
+
 <!-- Unlock overlay -->
 <div id="unlock" class="fixed inset-0 z-50 flex items-center justify-center bg-bg-light dark:bg-bg-dark p-6">
   <form id="unlockForm" class="w-full max-w-xs rounded-2xl border border-border-light dark:border-border-dark bg-white dark:bg-surface-dark p-6 text-center">
@@ -39,8 +42,14 @@ tailwind.config={darkMode:"class",theme:{extend:{
     <input id="pw" type="password" placeholder="密码" autocomplete="current-password"
       class="w-full mt-4 px-3 py-2.5 rounded-lg border border-border-light dark:border-border-dark bg-surface-light dark:bg-bg-dark text-sm text-center outline-none focus:border-primary">
     <button id="btnUnlock" type="submit" class="w-full mt-3 py-2.5 rounded-lg bg-primary hover:bg-blue-600 text-white text-sm font-semibold transition-colors">解锁</button>
-    <div id="unlockCountdown" class="hidden mt-4">
-      <div id="cdNum" class="text-4xl font-bold text-primary tabular-nums">5</div>
+    <div id="unlockProgress" class="hidden mt-4">
+      <div class="flex items-center justify-center gap-2 text-primary">
+        <span class="material-icons animate-spin" style="font-size:20px">autorenew</span>
+        <span id="progText" class="text-sm font-medium">正在解密…</span>
+      </div>
+      <div class="mt-3 h-1.5 rounded-full bg-surface-light dark:bg-bg-dark overflow-hidden">
+        <div id="progBar" class="h-full bg-primary transition-[width] duration-1000 ease-linear" style="width:0%"></div>
+      </div>
     </div>
     <div id="unlockHint" class="hidden text-xs text-muted-light dark:text-muted-dark mt-2 leading-relaxed"></div>
     <div id="unlockMsg" class="text-xs mt-3 min-h-[16px]"></div>
@@ -203,15 +212,19 @@ function renderPage(id){
   renderNav();
 }
 
+let lastMs=parseInt(localStorage.getItem('en_last_ms')||'0',10)||0;
 function updateMode(){
-  const editable = !!token;
-  $('btnEdit').style.opacity = editable ? '1' : '.55';
-  $('btnEdit').title = editable ? '编辑' : '编辑时输入 Token';
-  $('modeInfo').textContent = editable ? '可编辑 · 提交到 dev' : '只读 · 编辑时输入 Token';
+  $('modeInfo').textContent = (token?'可编辑 · 保存时提交到 dev':'保存时输入 Token 即可提交') + (lastMs?(' · 上次解密 '+lastMs+' ms'):'');
 }
-function showApp(){
+let toastTimer=null;
+function showToast(msg){
+  const t=$('toast'); t.textContent=msg; t.classList.remove('hidden');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.add('hidden'),4500);
+}
+function showApp(ms){
   $('unlock').classList.add('hidden');
   $('app').classList.remove('hidden');
+  if(ms!=null){ lastMs=ms; showToast('✓ 解密完成 · 本次耗时 '+ms+' ms'); }
   updateMode();
 }
 
@@ -222,11 +235,12 @@ $('unlockForm').onsubmit = async (e) => {
   if(!pw){ $('unlockMsg').textContent='请输入密码'; $('unlockMsg').className='text-xs mt-3 text-red-500'; return; }
   $('btnUnlock').disabled=true; $('pw').disabled=true;
   $('unlockMsg').textContent='';
-  $('unlockCountdown').classList.remove('hidden');
+  $('unlockProgress').classList.remove('hidden');
   $('unlockHint').classList.remove('hidden');
   const last=parseInt(localStorage.getItem('en_last_ms')||'0',10);
-  $('unlockHint').textContent='Argon2id '+(params?params.memMiB:512)+' MiB · 一次验证'+(last?('上次约 '+(last/1000).toFixed(1)+' 秒'):'预计约 3–8 秒')+'（取决于设备）';
-  let n=5; $('cdNum').textContent=n;
+  $('unlockHint').textContent='Argon2id '+(params?params.memMiB:512)+' MiB · 一次解密'+(last?('上次约 '+(last/1000).toFixed(1)+' 秒'):'预计约 3–8 秒')+'（取决于设备）';
+  const setProg=(pct,text)=>{ $('progBar').style.width=pct+'%'; if(text) $('progText').textContent=text; };
+  let n=5; setProg(0,'正在解密… '+n+'s');
   const t0=performance.now();
   const derivePromise=(async()=>{
     if(!params) await loadParams();
@@ -236,20 +250,22 @@ $('unlockForm').onsubmit = async (e) => {
     state=await decryptNotes(enc);
   })();
   derivePromise.catch(()=>{});
-  const cdPromise=new Promise(res=>{const t=setInterval(()=>{n--;if(n<=0){clearInterval(t);$('cdNum').textContent='0';res();}else $('cdNum').textContent=n;},1000);});
+  const cdPromise=new Promise(res=>{const t=setInterval(()=>{n--;if(n<=0){clearInterval(t);res();}else setProg((5-n)/5*100,'正在解密… '+n+'s');},1000);});
   try{
     await cdPromise;
-    $('unlockHint').textContent='验证计算中…';
+    setProg(100,'正在解密…（大内存计算中）');
+    $('progBar').classList.add('animate-pulse');
     await derivePromise;
-    localStorage.setItem('en_last_ms', String(Math.round(performance.now()-t0)));
-    showApp();
+    const ms=Math.round(performance.now()-t0);
+    localStorage.setItem('en_last_ms', String(ms));
+    showApp(ms);
     const id=(location.hash||'').replace(/^#\/?/,'') || state.nav[0].id;
     renderPage(id);
   }catch(err){
-    $('unlockCountdown').classList.add('hidden');
+    $('unlockProgress').classList.add('hidden');
     $('pw').disabled=false; $('btnUnlock').disabled=false;
     if(err.message==='MAGIC'){ $('unlockMsg').textContent='密码错误或数据损坏'; }
-    else { $('unlockMsg').textContent='解锁失败：'+err.message; }
+    else { $('unlockMsg').textContent='解密失败：'+err.message; }
     $('unlockMsg').className='text-xs mt-3 text-red-500';
   }
 };
@@ -276,12 +292,7 @@ $('tkCancel').onclick=()=>{
 };
 
 /* ── edit / save ── */
-$('btnEdit').onclick = async () => {
-  if(!token){
-    token = await askToken();
-    if(!token) return;
-    updateMode();
-  }
+$('btnEdit').onclick = () => {
   $('editId').textContent=currentId;
   $('editArea').value=state.pages[currentId]||'';
   $('saveMsg').textContent='';
@@ -291,6 +302,11 @@ $('btnCancel').onclick = () => $('editor').classList.add('hidden');
 
 $('btnSave').onclick = async () => {
   const text=$('editArea').value;
+  if(!token){
+    token = await askToken();
+    if(!token){ return; }
+    updateMode();
+  }
   state.pages[currentId]=text;
   $('btnSave').disabled=true;
   $('saveMsg').textContent='加密并提交中…';
