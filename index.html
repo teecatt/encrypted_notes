@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex">
 <title>Encrypted Notes</title>
 <script>
-(function(){try{var s=localStorage.getItem("theme-preference")||"system";var d=window.matchMedia&&window.matchMedia("(prefers-color-scheme:dark)").matches;if(s==="dark")d=true;else if(s==="light")d=false;if(d)document.documentElement.classList.add("dark");else document.documentElement.classList.remove("dark");}catch(e){}})();
+(function(){try{var s=localStorage.getItem("en-theme")||"dark";var d=s==="dark"||(s==="system"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme:dark)").matches);if(d)document.documentElement.classList.add("dark");else document.documentElement.classList.remove("dark");}catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 <script>
@@ -29,16 +29,20 @@ tailwind.config={darkMode:"class",theme:{extend:{
 </head>
 <body class="bg-bg-light dark:bg-bg-dark text-text-light dark:text-text-dark font-sans min-h-screen">
 
+<!-- Theme toggle (always visible, top-right) -->
+<button id="theme-toggle-lock" class="fixed top-3 right-3 z-[60] p-2 rounded-lg text-muted-light dark:text-muted-dark bg-white/80 dark:bg-surface-dark/80 backdrop-blur border border-border-light dark:border-border-dark" title="切换主题"><span class="material-icons text-lg" data-theme-icon>dark_mode</span></button>
+
 <!-- Unlock overlay -->
 <div id="unlock" class="fixed inset-0 z-50 flex items-center justify-center bg-bg-light dark:bg-bg-dark p-6">
-  <form id="unlockForm" class="w-full max-w-sm rounded-2xl border border-border-light dark:border-border-dark bg-white dark:bg-surface-dark p-6">
-    <h1 class="text-xl font-bold mb-1 flex items-center gap-2"><span class="material-icons text-primary">lock</span> 加密笔记</h1>
-    <p class="text-xs text-muted-light dark:text-muted-dark mb-5">Argon2id 派生 · AES-CTR 解密 · 明文不出浏览器</p>
-    <label class="block text-sm text-muted-light dark:text-muted-dark mb-1.5">密码</label>
-    <input id="pw" type="password" placeholder="输入密码，回车解锁" autocomplete="current-password"
-      class="w-full px-3 py-2.5 rounded-lg border border-border-light dark:border-border-dark bg-surface-light dark:bg-bg-dark text-sm outline-none focus:border-primary mb-1">
-    <div class="text-xs text-muted-light dark:text-muted-dark mb-4">demo 密码：<code>password</code></div>
-    <button id="btnUnlock" type="submit" class="w-full py-2.5 rounded-lg bg-primary hover:bg-blue-600 text-white text-sm font-semibold transition-colors">解锁</button>
+  <form id="unlockForm" class="w-full max-w-xs rounded-2xl border border-border-light dark:border-border-dark bg-white dark:bg-surface-dark p-6 text-center">
+    <span class="material-icons text-primary" style="font-size:40px">lock</span>
+    <input id="pw" type="password" placeholder="密码" autocomplete="current-password"
+      class="w-full mt-4 px-3 py-2.5 rounded-lg border border-border-light dark:border-border-dark bg-surface-light dark:bg-bg-dark text-sm text-center outline-none focus:border-primary">
+    <button id="btnUnlock" type="submit" class="w-full mt-3 py-2.5 rounded-lg bg-primary hover:bg-blue-600 text-white text-sm font-semibold transition-colors">解锁</button>
+    <div id="unlockCountdown" class="hidden mt-4">
+      <div id="cdNum" class="text-4xl font-bold text-primary tabular-nums">5</div>
+    </div>
+    <div id="unlockHint" class="hidden text-xs text-muted-light dark:text-muted-dark mt-2 leading-relaxed"></div>
     <div id="unlockMsg" class="text-xs mt-3 min-h-[16px]"></div>
   </form>
 </div>
@@ -50,6 +54,7 @@ tailwind.config={darkMode:"class",theme:{extend:{
     <span class="text-sm font-bold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">encrypted_notes</span>
     <span id="pageTitle" class="text-xs text-muted-light dark:text-muted-dark truncate"></span>
     <div class="flex-1"></div>
+    <a id="btnHelp" href="https://down2.top/notes/argon2/" target="_blank" rel="noopener" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="为什么无法暴力破解？"><span class="material-icons text-lg">help_outline</span></a>
     <button id="btnEdit" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="编辑"><span class="material-icons text-lg">edit</span></button>
     <button id="btnReload" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="刷新"><span class="material-icons text-lg">refresh</span></button>
     <button id="btnLock" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="锁定"><span class="material-icons text-lg">lock</span></button>
@@ -128,12 +133,28 @@ async function loadParams(){
   params = await r.json();
 }
 
-async function deriveKey(pw){
+function deriveKeyMain(pw){
   const salt = hexToBytes(params.salt);
-  const pass = new TextEncoder().encode(pw);
-  // yield a paint before the heavy sync computation
-  await new Promise(r=>setTimeout(r,30));
-  return argon2id(pass, salt, {t:params.time, m:params.memKiB, p:params.parallelism, dkLen:params.hashLen});
+  return argon2id(new TextEncoder().encode(pw), salt, {t:params.time, m:params.memKiB, p:params.parallelism, dkLen:params.hashLen});
+}
+function deriveKey(pw){
+  return new Promise((resolve,reject)=>{
+    let w;
+    try{
+      const code =
+        "import { argon2id } from 'https://cdn.jsdelivr.net/npm/@noble/hashes@2.4.0/argon2.js';"+
+        "self.onmessage=(e)=>{const d=e.data;try{"+
+        "const salt=new Uint8Array(d.saltHex.match(/../g).map(h=>parseInt(h,16)));"+
+        "const key=argon2id(new TextEncoder().encode(d.pass),salt,{t:d.t,m:d.m,p:d.p,dkLen:d.dkLen});"+
+        "self.postMessage({ok:true,key:Array.from(key)});"+
+        "}catch(err){self.postMessage({ok:false,error:String(err&&err.message||err)});}};";
+      const url=URL.createObjectURL(new Blob([code],{type:'text/javascript'}));
+      w=new Worker(url,{type:'module'});
+      w.onmessage=(e)=>{w.terminate();URL.revokeObjectURL(url);e.data.ok?resolve(new Uint8Array(e.data.key)):reject(new Error(e.data.error));};
+      w.onerror=(e)=>{w.terminate();URL.revokeObjectURL(url);try{resolve(deriveKeyMain(pw));}catch(err){reject(err);}};
+      w.postMessage({pass:pw,saltHex:params.salt,t:params.time,m:params.memKiB,p:params.parallelism,dkLen:params.hashLen});
+    }catch(err){ try{resolve(deriveKeyMain(pw));}catch(e2){reject(e2);} }
+  });
 }
 const importKey = kb => crypto.subtle.importKey('raw', kb, {name:'AES-CTR'}, false, ['encrypt','decrypt']);
 
@@ -199,23 +220,38 @@ $('unlockForm').onsubmit = async (e) => {
   e.preventDefault();
   const pw=$('pw').value;
   if(!pw){ $('unlockMsg').textContent='请输入密码'; $('unlockMsg').className='text-xs mt-3 text-red-500'; return; }
-  $('btnUnlock').disabled=true;
-  $('unlockMsg').textContent='派生密钥中（Argon2id '+(params?params.memMiB:512)+' MiB，可能数秒）…';
-  $('unlockMsg').className='text-xs mt-3 text-yellow-500';
-  try{
+  $('btnUnlock').disabled=true; $('pw').disabled=true;
+  $('unlockMsg').textContent='';
+  $('unlockCountdown').classList.remove('hidden');
+  $('unlockHint').classList.remove('hidden');
+  const last=parseInt(localStorage.getItem('en_last_ms')||'0',10);
+  $('unlockHint').textContent='Argon2id '+(params?params.memMiB:512)+' MiB · 一次验证'+(last?('上次约 '+(last/1000).toFixed(1)+' 秒'):'预计约 3–8 秒')+'（取决于设备）';
+  let n=5; $('cdNum').textContent=n;
+  const t0=performance.now();
+  const derivePromise=(async()=>{
     if(!params) await loadParams();
-    const kb = await deriveKey(pw);
-    aesKey = await importKey(kb);
-    const enc = await fetchNotes();
-    state = await decryptNotes(enc);
+    const kb=await deriveKey(pw);
+    aesKey=await importKey(kb);
+    const enc=await fetchNotes();
+    state=await decryptNotes(enc);
+  })();
+  derivePromise.catch(()=>{});
+  const cdPromise=new Promise(res=>{const t=setInterval(()=>{n--;if(n<=0){clearInterval(t);$('cdNum').textContent='0';res();}else $('cdNum').textContent=n;},1000);});
+  try{
+    await cdPromise;
+    $('unlockHint').textContent='验证计算中…';
+    await derivePromise;
+    localStorage.setItem('en_last_ms', String(Math.round(performance.now()-t0)));
     showApp();
     const id=(location.hash||'').replace(/^#\/?/,'') || state.nav[0].id;
     renderPage(id);
-  }catch(e){
-    if(e.message==='MAGIC'){ $('unlockMsg').textContent='密码错误或数据损坏'; }
-    else { $('unlockMsg').textContent='解锁失败：'+e.message; }
+  }catch(err){
+    $('unlockCountdown').classList.add('hidden');
+    $('pw').disabled=false; $('btnUnlock').disabled=false;
+    if(err.message==='MAGIC'){ $('unlockMsg').textContent='密码错误或数据损坏'; }
+    else { $('unlockMsg').textContent='解锁失败：'+err.message; }
     $('unlockMsg').className='text-xs mt-3 text-red-500';
-  }finally{ $('btnUnlock').disabled=false; }
+  }
 };
 
 /* ── token prompt (only when editing) ── */
@@ -289,11 +325,11 @@ $('menu').onclick = () => $('sidebar').classList.toggle('hidden');
 
 /* ── theme ── */
 (function(){
-  const K='theme-preference';
-  const get=()=>localStorage.getItem(K)||'system';
+  const K='en-theme';
+  const get=()=>localStorage.getItem(K)||'dark';
   const apply=p=>{const d=p==='dark'||(p==='system'&&matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.classList.toggle('dark',d);document.querySelectorAll('[data-theme-icon]').forEach(e=>e.textContent=d?'light_mode':'dark_mode');};
   apply(get());
-  $('theme-toggle').onclick=()=>{const n=get()==='dark'?'light':'dark';localStorage.setItem(K,n);apply(n);};
+  ['theme-toggle','theme-toggle-lock'].forEach(id=>{const el=$(id); if(el) el.onclick=()=>{const n=get()==='dark'?'light':'dark';localStorage.setItem(K,n);apply(n);};});
 })();
 
 window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||'').replace(/^#\/?/,'')); });
