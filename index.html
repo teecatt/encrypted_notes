@@ -9,12 +9,23 @@
 (function(){try{var s=localStorage.getItem("en-theme")||"dark";var d=s==="dark"||(s==="system"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme:dark)").matches);if(d)document.documentElement.classList.add("dark");else document.documentElement.classList.remove("dark");}catch(e){}})();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-<script>
-tailwind.config={darkMode:"class",theme:{extend:{
-  colors:{primary:"#3B82F6","bg-light":"#FFFFFF","bg-dark":"#111827","surface-light":"#F9FAFB","surface-dark":"#1F2937","border-light":"#E5E7EB","border-dark":"#374151","text-light":"#1F2937","text-dark":"#F9FAFB","muted-light":"#6B7280","muted-dark":"#9CA3AF"},
-  fontFamily:{sans:["Inter","system-ui","sans-serif"]}
-}}};
-</script>
+<style type="text/tailwindcss">
+@custom-variant dark (&:where(.dark, .dark *));
+@theme {
+  --color-primary: #3B82F6;
+  --color-bg-light: #FFFFFF;
+  --color-bg-dark: #111827;
+  --color-surface-light: #F9FAFB;
+  --color-surface-dark: #1F2937;
+  --color-border-light: #E5E7EB;
+  --color-border-dark: #374151;
+  --color-text-light: #1F2937;
+  --color-text-dark: #F9FAFB;
+  --color-muted-light: #6B7280;
+  --color-muted-dark: #9CA3AF;
+  --font-sans: Inter, system-ui, sans-serif;
+}
+</style>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
@@ -37,7 +48,10 @@ tailwind.config={darkMode:"class",theme:{extend:{
 
 <!-- Unlock overlay -->
 <div id="unlock" class="fixed inset-0 z-50 flex items-center justify-center bg-bg-light dark:bg-bg-dark p-6">
-  <form id="unlockForm" class="w-full max-w-xs rounded-2xl border border-border-light dark:border-border-dark bg-white dark:bg-surface-dark p-6 text-center">
+  <form id="unlockForm" class="relative w-full max-w-xs rounded-2xl border border-border-light dark:border-border-dark bg-white dark:bg-surface-dark p-6 text-center">
+    <a href="https://down2.top/notes/argon2/" target="_blank" rel="noopener" class="absolute top-3 right-3 text-muted-light dark:text-muted-dark hover:text-primary transition-colors" title="为什么无法暴力破解？" aria-label="为什么无法暴力破解？">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </a>
     <span class="material-icons text-primary" style="font-size:40px">lock</span>
     <input id="pw" type="password" placeholder="密码" autocomplete="current-password"
       class="w-full mt-4 px-3 py-2.5 rounded-lg border border-border-light dark:border-border-dark bg-surface-light dark:bg-bg-dark text-sm text-center outline-none focus:border-primary">
@@ -53,7 +67,6 @@ tailwind.config={darkMode:"class",theme:{extend:{
     </div>
     <div id="unlockHint" class="hidden text-xs text-muted-light dark:text-muted-dark mt-2 leading-relaxed"></div>
     <div id="unlockMsg" class="text-xs mt-3 min-h-[16px]"></div>
-    <a href="https://down2.top/notes/argon2/" target="_blank" rel="noopener" class="inline-flex items-center gap-1 mt-4 text-xs text-muted-light dark:text-muted-dark hover:text-primary transition-colors"><span class="material-icons" style="font-size:14px">help_outline</span> 为什么无法暴力破解？</a>
   </form>
 </div>
 
@@ -64,7 +77,7 @@ tailwind.config={darkMode:"class",theme:{extend:{
     <span class="text-sm font-bold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">encrypted_notes</span>
     <span id="pageTitle" class="text-xs text-muted-light dark:text-muted-dark truncate"></span>
     <div class="flex-1"></div>
-    <a id="btnHelp" href="https://down2.top/notes/argon2/" target="_blank" rel="noopener" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="为什么无法暴力破解？"><span class="material-icons text-lg">help_outline</span></a>
+    <a id="btnHelp" href="https://down2.top/notes/argon2/" target="_blank" rel="noopener" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="为什么无法暴力破解？" aria-label="为什么无法暴力破解？"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>
     <button id="btnEdit" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="编辑"><span class="material-icons text-lg">edit</span></button>
     <button id="btnReload" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="刷新"><span class="material-icons text-lg">refresh</span></button>
     <button id="btnLock" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="锁定"><span class="material-icons text-lg">lock</span></button>
@@ -76,6 +89,7 @@ tailwind.config={darkMode:"class",theme:{extend:{
       <nav id="nav" class="text-sm space-y-0.5"></nav>
       <div class="mt-6 pt-4 border-t border-border-light dark:border-border-dark text-xs text-muted-light dark:text-muted-dark">
         <div id="modeInfo"></div>
+        <pre id="debug" class="mt-3 whitespace-pre-wrap break-all text-[11px] leading-relaxed text-muted-light dark:text-muted-dark"></pre>
       </div>
     </aside>
     <main class="flex-1 min-w-0">
@@ -121,7 +135,7 @@ const API_URL    = 'https://api.github.com/repos/teecatt/encrypted_notes/content
 const ARGON2_URL = new URL('vendor/argon2-bundled.min.js', location.href).href;
 
 const $ = id => document.getElementById(id);
-let params=null, aesKey=null, state=null, token='', currentId=null, dirty=false;
+let params=null, aesKey=null, state=null, token='', currentId=null, dirty=false, garbageText=null;
 
 const bytesToB64 = b => { let s=''; b.forEach(x=>s+=String.fromCharCode(x)); return btoa(s); };
 const b64ToBytes = s => { const bin=atob(s); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; };
@@ -167,18 +181,24 @@ function deriveKeyWasm(pw){
     w.postMessage({pass:pw,saltHex:params.salt,t:params.time,m:params.memKiB,p:params.parallelism,dkLen:params.hashLen});
   });
 }
+let lastEngine='';
 async function deriveKey(pw){
-  try{ return await deriveKeyWasm(pw); }
-  catch(e){ console.warn('WASM 解密失败，回退纯 JS：'+e.message); return await deriveKeyNoble(pw); }
+  try{ const k=await deriveKeyWasm(pw); lastEngine='wasm'; return k; }
+  catch(e){ console.warn('WASM 解密失败，回退纯 JS：'+e.message); lastEngine='js'; return await deriveKeyNoble(pw); }
 }
 const importKey = kb => crypto.subtle.importKey('raw', kb, {name:'AES-CTR'}, false, ['encrypt','decrypt']);
 
-async function decryptNotes(enc){
+async function decryptToText(enc){
   const iv = b64ToBytes(enc.iv), ct = b64ToBytes(enc.ct);
   const pt = new Uint8Array(await crypto.subtle.decrypt({name:'AES-CTR', counter:iv, length:128}, aesKey, ct));
-  const magic = new TextDecoder().decode(pt.slice(0,7));
-  if(magic !== params.magic) throw new Error('MAGIC');
-  return JSON.parse(new TextDecoder().decode(pt.slice(7)));
+  return new TextDecoder('utf-8', {fatal:false}).decode(pt);
+}
+function interpretPlaintext(text){
+  if(text.startsWith(params.magic)){
+    try{ return {state: JSON.parse(text.slice(params.magic.length)), garbage:null}; }
+    catch(e){ return {state:null, garbage:text}; }
+  }
+  return {state:null, garbage:text};
 }
 async function encryptNotes(obj){
   const data = new TextEncoder().encode(params.magic + JSON.stringify(obj));
@@ -193,8 +213,11 @@ async function fetchNotes(){
   return await r.json();
 }
 
+function escapeHtml(s){ return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
 function renderNav(){
   const nav=$('nav'); nav.innerHTML='';
+  if(!state || !state.nav) return;
   const add = (items, depth) => {
     for(const it of items){
       const a=document.createElement('a');
@@ -210,7 +233,14 @@ function renderNav(){
   add(state.nav, 0);
 }
 
+function showGarbage(text){
+  $('pageTitle').textContent='乱码';
+  $('content').innerHTML='<div class="not-prose"><p class="text-xs text-muted-light dark:text-muted-dark mb-3">密码可能不对，以下是解密出的原始内容（乱码）：</p><pre class="whitespace-pre-wrap break-all text-xs leading-relaxed p-4 rounded-lg bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark">'+escapeHtml(text)+'</pre></div>';
+  renderNav();
+}
+
 function renderPage(id){
+  if(!state || !state.pages){ showGarbage(garbageText||''); return; }
   if(!state.pages[id]){ currentId=state.nav[0]?.id; id=currentId; }
   currentId=id;
   $('pageTitle').textContent = state.pages[id] ? id : '';
@@ -227,15 +257,25 @@ function showToast(msg){
   const t=$('toast'); t.textContent=msg; t.classList.remove('hidden');
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.add('hidden'),4500);
 }
-function showApp(ms, dbg){
+function setDebug(dbg){
+  const eng = lastEngine==='wasm' ? 'WASM（快）' : lastEngine==='js' ? '纯 JS（慢，回退）' : '?';
+  $('debug').textContent =
+    '引擎  '+eng+'\n'+
+    '参数  '+dbg.params+' ms\n'+
+    '密钥  '+dbg.derive+' ms\n'+
+    '拉取  '+dbg.fetch+' ms\n'+
+    'AES   '+dbg.decrypt+' ms\n'+
+    '实际  '+dbg.work+' ms\n'+
+    '含倒计时 '+dbg.total+' ms';
+  console.log('[解密耗时]', dbg, 'engine='+lastEngine);
+}
+function showApp(dbg){
   $('unlock').classList.add('hidden');
   $('app').classList.remove('hidden');
-  if(ms!=null){
-    lastMs=ms;
-    let msg='✓ 解密完成 · 本次耗时 '+ms+' ms';
-    if(dbg) msg+='（密钥 '+dbg.derive+' · 拉取 '+dbg.fetch+' · AES '+dbg.decrypt+'）';
-    showToast(msg);
-    if(dbg) console.log('[解密耗时] 总 '+ms+'ms | 参数 '+dbg.params+'ms | 密钥 '+dbg.derive+'ms | 拉取 '+dbg.fetch+'ms | AES '+dbg.decrypt+'ms');
+  if(dbg){
+    lastMs=dbg.work;
+    showToast('✓ 已解密 · 实际 '+dbg.work+' ms（含 5s 倒计时 '+dbg.total+' ms）');
+    setDebug(dbg);
   }
   updateMode();
 }
@@ -254,7 +294,7 @@ $('unlockForm').onsubmit = async (e) => {
   const setProg=(pct,text)=>{ $('progBar').style.width=pct+'%'; if(text) $('progText').textContent=text; };
   let n=5; setProg(0,'正在解密… '+n+'s');
   const t0=performance.now();
-  const dbg={params:0,derive:0,fetch:0,decrypt:0};
+  const dbg={params:0,derive:0,fetch:0,decrypt:0,work:0,total:0};
   const derivePromise=(async()=>{
     let a=performance.now();
     if(!params) await loadParams();
@@ -267,9 +307,12 @@ $('unlockForm').onsubmit = async (e) => {
     dbg.fetch=performance.now()-a;
     a=performance.now();
     aesKey=await importKey(kb);
-    state=await decryptNotes(enc);
+    const text=await decryptToText(enc);
     dbg.decrypt=performance.now()-a;
-    Object.keys(dbg).forEach(k=>dbg[k]=Math.round(dbg[k]));
+    const r=interpretPlaintext(text);
+    state=r.state; garbageText=r.garbage;
+    dbg.work=Math.round(performance.now()-t0);
+    ['params','derive','fetch','decrypt'].forEach(k=>dbg[k]=Math.round(dbg[k]));
   })();
   derivePromise.catch(()=>{});
   const cdPromise=new Promise(res=>{const t=setInterval(()=>{n--;if(n<=0){clearInterval(t);res();}else setProg((5-n)/5*100,'正在解密… '+n+'s');},1000);});
@@ -278,16 +321,19 @@ $('unlockForm').onsubmit = async (e) => {
     setProg(100,'正在解密…（大内存计算中）');
     $('progBar').classList.add('animate-pulse');
     await derivePromise;
-    const ms=Math.round(performance.now()-t0);
-    localStorage.setItem('en_last_ms', String(ms));
-    showApp(ms, dbg);
-    const id=(location.hash||'').replace(/^#\/?/,'') || state.nav[0].id;
-    renderPage(id);
+    dbg.total=Math.round(performance.now()-t0);
+    localStorage.setItem('en_last_ms', String(dbg.work));
+    showApp(dbg);
+    if(state && state.nav){
+      const id=(location.hash||'').replace(/^#\/?/,'') || state.nav[0].id;
+      renderPage(id);
+    } else {
+      renderPage(null);
+    }
   }catch(err){
     $('unlockProgress').classList.add('hidden');
     $('pw').disabled=false; $('btnUnlock').disabled=false;
-    if(err.message==='MAGIC'){ $('unlockMsg').textContent='密码错误或数据损坏'; }
-    else { $('unlockMsg').textContent='解密失败：'+err.message; }
+    $('unlockMsg').textContent='解密失败：'+err.message;
     $('unlockMsg').className='text-xs mt-3 text-red-500';
   }
 };
@@ -315,6 +361,7 @@ $('tkCancel').onclick=()=>{
 
 /* ── edit / save ── */
 $('btnEdit').onclick = () => {
+  if(!state || !state.pages){ showToast('当前是乱码（密码可能不对），无法编辑'); return; }
   $('editId').textContent=currentId;
   $('editArea').value=state.pages[currentId]||'';
   $('saveMsg').textContent='';
@@ -355,7 +402,7 @@ $('btnSave').onclick = async () => {
 };
 
 $('btnReload').onclick = async () => {
-  try{ const enc=await fetchNotes(); state=await decryptNotes(enc); renderPage(currentId); }
+  try{ const enc=await fetchNotes(); const text=await decryptToText(enc); const r=interpretPlaintext(text); state=r.state; garbageText=r.garbage; renderPage(currentId); }
   catch(e){ alert('刷新失败：'+e.message); }
 };
 $('btnLock').onclick = () => location.reload();
