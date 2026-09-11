@@ -2,6 +2,9 @@ name: Snapshot Sync
 on:
   push:
     branches: [dev]
+concurrency:
+  group: snapshot-sync
+  cancel-in-progress: false
 permissions:
   contents: write
 jobs:
@@ -14,8 +17,18 @@ jobs:
           fetch-depth: 0
       - name: Sync notes from dev
         run: |
+          set -e
           git fetch origin dev
-          git checkout origin/dev -- notes.enc.json || echo "no notes yet"
-          git add -A
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "snapshot: $(date -u +%Y%m%d%H%M%S)" || echo "No changes"
+          if git cat-file -e origin/dev:notes.enc.json 2>/dev/null; then
+            git checkout origin/dev -- notes.enc.json
+            git add notes.enc.json
+          else
+            echo "notes.enc.json not present on dev; nothing to sync"
+            exit 0
+          fi
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "snapshot: $(date -u +%Y%m%d%H%M%S)"
           git push origin master
