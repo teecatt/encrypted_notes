@@ -12,7 +12,6 @@
 <style type="text/tailwindcss">
 @custom-variant dark (&:where(.dark, .dark *));
 @theme {
-  --color-primary: #3B82F6;
   --color-bg-light: #FFFFFF;
   --color-bg-dark: #111827;
   --color-surface-light: #F9FAFB;
@@ -35,7 +34,8 @@
 *{-webkit-tap-highlight-color:transparent}
 .prose pre{background:#0d1117;border-radius:.5rem;padding:1rem;overflow:auto}
 .prose code{font-size:.85em}
-.nav-active{color:#3B82F6;font-weight:600}
+.nav-active{font-weight:600}
+#content a{color:inherit;text-decoration:underline;text-underline-offset:2px}
 </style>
 </head>
 <body class="bg-bg-light dark:bg-bg-dark text-text-light dark:text-text-dark font-sans min-h-screen">
@@ -49,24 +49,20 @@
 <!-- Unlock overlay -->
 <div id="unlock" class="fixed inset-0 z-50 flex items-center justify-center bg-bg-light dark:bg-bg-dark p-6">
   <form id="unlockForm" class="relative w-full max-w-xs rounded-2xl border border-border-light dark:border-border-dark bg-white dark:bg-surface-dark p-6 text-center">
-    <a href="https://down2.top/notes/argon2/" target="_blank" rel="noopener" class="absolute top-3 right-3 text-muted-light dark:text-muted-dark hover:text-primary transition-colors" title="为什么无法暴力破解？" aria-label="为什么无法暴力破解？">
+    <a href="https://down2.top/notes/argon2/" target="_blank" rel="noopener" class="absolute top-3 right-3 text-muted-light dark:text-muted-dark hover:text-text-light dark:hover:text-text-dark transition-colors" title="为什么无法暴力破解？" aria-label="为什么无法暴力破解？">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     </a>
-    <span class="material-icons text-primary" style="font-size:40px">lock</span>
+    <span class="material-icons" style="font-size:40px">lock</span>
     <input id="pw" type="password" placeholder="密码" autocomplete="current-password"
-      class="w-full mt-4 px-3 py-2.5 rounded-lg border border-border-light dark:border-border-dark bg-surface-light dark:bg-bg-dark text-sm text-center outline-none focus:border-primary">
-    <button id="btnUnlock" type="submit" class="w-full mt-3 py-2.5 rounded-lg bg-primary hover:bg-blue-600 text-white text-sm font-semibold transition-colors">解锁</button>
-    <div id="unlockProgress" class="hidden mt-4">
-      <div class="flex items-center justify-center gap-2 text-primary">
-        <span class="material-icons animate-spin" style="font-size:20px">autorenew</span>
-        <span id="progText" class="text-sm font-medium">正在解密…</span>
-      </div>
-      <div class="mt-3 h-1.5 rounded-full bg-surface-light dark:bg-bg-dark overflow-hidden">
-        <div id="progBar" class="h-full bg-primary transition-[width] duration-1000 ease-linear" style="width:0%"></div>
-      </div>
+      class="w-full mt-4 px-3 py-2.5 rounded-lg border border-border-light dark:border-border-dark bg-surface-light dark:bg-bg-dark text-sm text-center outline-none focus:border-text-light dark:focus:border-text-dark">
+    <div class="mt-5 flex justify-center">
+      <button id="btnUnlock" type="submit" class="w-12 h-12 rounded-full border-2 border-border-light dark:border-border-dark flex items-center justify-center text-text-light dark:text-text-dark hover:border-text-light dark:hover:border-text-dark transition-colors" title="解锁" aria-label="解锁">
+        <svg id="arrowIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        <span id="spinIcon" class="hidden material-icons animate-spin" style="font-size:20px">autorenew</span>
+      </button>
     </div>
-    <div id="unlockHint" class="hidden text-xs text-muted-light dark:text-muted-dark mt-2 leading-relaxed"></div>
-    <div id="unlockMsg" class="text-xs mt-3 min-h-[16px]"></div>
+    <div id="unlockStatus" class="hidden text-xs text-muted-light dark:text-muted-dark mt-3 min-h-[16px]"></div>
+    <div id="unlockMsg" class="text-xs mt-2 min-h-[16px]"></div>
   </form>
 </div>
 
@@ -74,7 +70,7 @@
 <div id="app" class="hidden min-h-screen">
   <header class="sticky top-0 z-30 flex items-center gap-2 h-12 px-4 border-b border-border-light dark:border-border-dark bg-bg-light dark:bg-bg-dark">
     <button id="menu" class="lg:hidden p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark"><span class="material-icons text-lg">menu</span></button>
-    <span class="text-sm font-bold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">encrypted_notes</span>
+    <span class="text-sm font-bold text-text-light dark:text-text-dark">encrypted_notes</span>
     <span id="pageTitle" class="text-xs text-muted-light dark:text-muted-dark truncate"></span>
     <div class="flex-1"></div>
     <a id="btnHelp" href="https://down2.top/notes/argon2/" target="_blank" rel="noopener" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="为什么无法暴力破解？" aria-label="为什么无法暴力破解？"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>
@@ -105,7 +101,7 @@
       <span class="text-sm font-semibold">编辑 · <span id="editId"></span></span>
       <div class="flex-1"></div>
       <button id="btnCancel" class="px-3 py-1.5 rounded-lg text-sm text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-bg-dark">取消</button>
-      <button id="btnSave" class="px-4 py-1.5 rounded-lg text-sm font-semibold bg-primary hover:bg-blue-600 text-white">保存到 dev</button>
+      <button id="btnSave" class="px-4 py-1.5 rounded-lg text-sm font-semibold bg-text-light dark:bg-text-dark text-white dark:text-black hover:opacity-80">保存到 dev</button>
     </div>
     <textarea id="editArea" class="flex-1 w-full resize-none p-4 bg-surface-light dark:bg-bg-dark font-mono text-sm outline-none"></textarea>
     <div id="saveMsg" class="px-4 py-2 text-xs border-t border-border-light dark:border-border-dark min-h-[32px]"></div>
@@ -115,13 +111,13 @@
 <!-- Token prompt (shown only when editing) -->
 <div id="tokenModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6">
   <form id="tokenForm" class="w-full max-w-sm rounded-2xl border border-border-light dark:border-border-dark bg-white dark:bg-surface-dark p-6">
-    <h2 class="text-base font-bold mb-1 flex items-center gap-2"><span class="material-icons text-primary">key</span> 需要 GitHub Token</h2>
+    <h2 class="text-base font-bold mb-1 flex items-center gap-2"><span class="material-icons">key</span> 需要 GitHub Token</h2>
     <p class="text-xs text-muted-light dark:text-muted-dark mb-4">仅用于把加密笔记提交到 <code>encrypted_notes</code> 的 <code>dev</code> 分支，只存内存，不落盘。</p>
     <input id="tk" type="password" placeholder="github_pat_..." autocomplete="off"
-      class="w-full px-3 py-2.5 rounded-lg border border-border-light dark:border-border-dark bg-surface-light dark:bg-bg-dark text-sm outline-none focus:border-primary mb-3">
+      class="w-full px-3 py-2.5 rounded-lg border border-border-light dark:border-border-dark bg-surface-light dark:bg-bg-dark text-sm outline-none focus:border-text-light dark:focus:border-text-dark mb-3">
     <div class="flex gap-2">
       <button type="button" id="tkCancel" class="flex-1 py-2.5 rounded-lg border border-border-light dark:border-border-dark text-sm text-muted-light dark:text-muted-dark">取消</button>
-      <button type="submit" class="flex-1 py-2.5 rounded-lg bg-primary hover:bg-blue-600 text-white text-sm font-semibold">确认</button>
+      <button type="submit" class="flex-1 py-2.5 rounded-lg bg-text-light dark:bg-text-dark text-white dark:text-black text-sm font-semibold hover:opacity-80">确认</button>
     </div>
   </form>
 </div>
@@ -234,8 +230,8 @@ function renderNav(){
 }
 
 function showGarbage(text){
-  $('pageTitle').textContent='乱码';
-  $('content').innerHTML='<div class="not-prose"><p class="text-xs text-muted-light dark:text-muted-dark mb-3">密码可能不对，以下是解密出的原始内容（乱码）：</p><pre class="whitespace-pre-wrap break-all text-xs leading-relaxed p-4 rounded-lg bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark">'+escapeHtml(text)+'</pre></div>';
+  $('pageTitle').textContent='';
+  $('content').innerHTML='<pre class="whitespace-pre-wrap break-all text-xs leading-relaxed">'+escapeHtml(text)+'</pre>';
   renderNav();
 }
 
@@ -265,8 +261,7 @@ function setDebug(dbg){
     '密钥  '+dbg.derive+' ms\n'+
     '拉取  '+dbg.fetch+' ms\n'+
     'AES   '+dbg.decrypt+' ms\n'+
-    '实际  '+dbg.work+' ms\n'+
-    '含倒计时 '+dbg.total+' ms';
+    '实际  '+dbg.work+' ms';
   console.log('[解密耗时]', dbg, 'engine='+lastEngine);
 }
 function showApp(dbg){
@@ -274,7 +269,7 @@ function showApp(dbg){
   $('app').classList.remove('hidden');
   if(dbg){
     lastMs=dbg.work;
-    showToast('✓ 已解密 · 实际 '+dbg.work+' ms（含 5s 倒计时 '+dbg.total+' ms）');
+    showToast('✓ 已解密 · '+dbg.work+' ms');
     setDebug(dbg);
   }
   updateMode();
@@ -284,15 +279,14 @@ function showApp(dbg){
 $('unlockForm').onsubmit = async (e) => {
   e.preventDefault();
   const pw=$('pw').value;
-  if(!pw){ $('unlockMsg').textContent='请输入密码'; $('unlockMsg').className='text-xs mt-3 text-red-500'; return; }
+  if(!pw){ $('unlockMsg').textContent='请输入密码'; $('unlockMsg').className='text-xs mt-2 text-red-500'; return; }
   $('btnUnlock').disabled=true; $('pw').disabled=true;
   $('unlockMsg').textContent='';
-  $('unlockProgress').classList.remove('hidden');
-  $('unlockHint').classList.remove('hidden');
-  const last=parseInt(localStorage.getItem('en_last_ms')||'0',10);
-  $('unlockHint').textContent='Argon2id '+(params?params.memMiB:512)+' MiB · 一次解密'+(last?('上次约 '+(last/1000).toFixed(1)+' 秒'):'预计约 3–8 秒')+'（取决于设备）';
-  const setProg=(pct,text)=>{ $('progBar').style.width=pct+'%'; if(text) $('progText').textContent=text; };
-  let n=5; setProg(0,'正在解密… '+n+'s');
+  $('arrowIcon').classList.add('hidden');
+  $('spinIcon').classList.remove('hidden');
+  $('unlockStatus').classList.remove('hidden');
+  const setStatus=(t)=>{ $('unlockStatus').textContent=t; };
+  setStatus('Generate key…');
   const t0=performance.now();
   const dbg={params:0,derive:0,fetch:0,decrypt:0,work:0,total:0};
   const derivePromise=(async()=>{
@@ -302,11 +296,13 @@ $('unlockForm').onsubmit = async (e) => {
     a=performance.now();
     const kb=await deriveKey(pw);
     dbg.derive=performance.now()-a;
+    setStatus('Fetch ciphertext…');
     a=performance.now();
     const enc=await fetchNotes();
     dbg.fetch=performance.now()-a;
     a=performance.now();
     aesKey=await importKey(kb);
+    setStatus('AES decrypting…');
     const text=await decryptToText(enc);
     dbg.decrypt=performance.now()-a;
     const r=interpretPlaintext(text);
@@ -315,11 +311,7 @@ $('unlockForm').onsubmit = async (e) => {
     ['params','derive','fetch','decrypt'].forEach(k=>dbg[k]=Math.round(dbg[k]));
   })();
   derivePromise.catch(()=>{});
-  const cdPromise=new Promise(res=>{const t=setInterval(()=>{n--;if(n<=0){clearInterval(t);res();}else setProg((5-n)/5*100,'正在解密… '+n+'s');},1000);});
   try{
-    await cdPromise;
-    setProg(100,'正在解密…（大内存计算中）');
-    $('progBar').classList.add('animate-pulse');
     await derivePromise;
     dbg.total=Math.round(performance.now()-t0);
     localStorage.setItem('en_last_ms', String(dbg.work));
@@ -331,10 +323,12 @@ $('unlockForm').onsubmit = async (e) => {
       renderPage(null);
     }
   }catch(err){
-    $('unlockProgress').classList.add('hidden');
+    $('arrowIcon').classList.remove('hidden');
+    $('spinIcon').classList.add('hidden');
+    $('unlockStatus').classList.add('hidden');
     $('pw').disabled=false; $('btnUnlock').disabled=false;
     $('unlockMsg').textContent='解密失败：'+err.message;
-    $('unlockMsg').className='text-xs mt-3 text-red-500';
+    $('unlockMsg').className='text-xs mt-2 text-red-500';
   }
 };
 
