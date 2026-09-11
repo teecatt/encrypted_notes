@@ -53,6 +53,7 @@ tailwind.config={darkMode:"class",theme:{extend:{
     </div>
     <div id="unlockHint" class="hidden text-xs text-muted-light dark:text-muted-dark mt-2 leading-relaxed"></div>
     <div id="unlockMsg" class="text-xs mt-3 min-h-[16px]"></div>
+    <a href="https://down2.top/notes/argon2/" target="_blank" rel="noopener" class="inline-flex items-center gap-1 mt-4 text-xs text-muted-light dark:text-muted-dark hover:text-primary transition-colors"><span class="material-icons" style="font-size:14px">help_outline</span> 为什么无法暴力破解？</a>
   </form>
 </div>
 
@@ -117,6 +118,7 @@ import { argon2id } from 'https://cdn.jsdelivr.net/npm/@noble/hashes@2.4.0/argon
 const PARAMS_URL = 'https://raw.githubusercontent.com/teecatt/encrypted_params/main/params.json';
 const NOTES_RAW  = 'https://raw.githubusercontent.com/teecatt/encrypted_notes/dev/notes.enc.json';
 const API_URL    = 'https://api.github.com/repos/teecatt/encrypted_notes/contents/notes.enc.json';
+const ARGON2_URL = new URL('vendor/argon2-bundled.min.js', location.href).href;
 
 const $ = id => document.getElementById(id);
 let params=null, aesKey=null, state=null, token='', currentId=null, dirty=false;
@@ -142,28 +144,32 @@ async function loadParams(){
   params = await r.json();
 }
 
-function deriveKeyMain(pw){
+function deriveKeyNoble(pw){
   const salt = hexToBytes(params.salt);
   return argon2id(new TextEncoder().encode(pw), salt, {t:params.time, m:params.memKiB, p:params.parallelism, dkLen:params.hashLen});
 }
-function deriveKey(pw){
+function deriveKeyWasm(pw){
   return new Promise((resolve,reject)=>{
     let w;
     try{
       const code =
-        "import { argon2id } from 'https://cdn.jsdelivr.net/npm/@noble/hashes@2.4.0/argon2.js';"+
-        "self.onmessage=(e)=>{const d=e.data;try{"+
-        "const salt=new Uint8Array(d.saltHex.match(/../g).map(h=>parseInt(h,16)));"+
-        "const key=argon2id(new TextEncoder().encode(d.pass),salt,{t:d.t,m:d.m,p:d.p,dkLen:d.dkLen});"+
-        "self.postMessage({ok:true,key:Array.from(key)});"+
+        "importScripts("+JSON.stringify(ARGON2_URL)+");"+
+        "self.onmessage=async function(e){var d=e.data;try{"+
+        "var salt=new Uint8Array(d.saltHex.match(/../g).map(function(h){return parseInt(h,16)}));"+
+        "var res=await argon2.hash({pass:d.pass,salt:salt,time:d.t,mem:d.m,parallelism:d.p,hashLen:d.dkLen,type:2});"+
+        "self.postMessage({ok:true,hashHex:res.hashHex});"+
         "}catch(err){self.postMessage({ok:false,error:String(err&&err.message||err)});}};";
-      const url=URL.createObjectURL(new Blob([code],{type:'text/javascript'}));
-      w=new Worker(url,{type:'module'});
-      w.onmessage=(e)=>{w.terminate();URL.revokeObjectURL(url);e.data.ok?resolve(new Uint8Array(e.data.key)):reject(new Error(e.data.error));};
-      w.onerror=(e)=>{w.terminate();URL.revokeObjectURL(url);try{resolve(deriveKeyMain(pw));}catch(err){reject(err);}};
-      w.postMessage({pass:pw,saltHex:params.salt,t:params.time,m:params.memKiB,p:params.parallelism,dkLen:params.hashLen});
-    }catch(err){ try{resolve(deriveKeyMain(pw));}catch(e2){reject(e2);} }
+      const url=URL.createObjectURL(new Blob([code],{type:'application/javascript'}));
+      w=new Worker(url);
+    }catch(err){ return reject(err); }
+    w.onmessage=(e)=>{w.terminate();e.data.ok?resolve(hexToBytes(e.data.hashHex)):reject(new Error(e.data.error));};
+    w.onerror=(e)=>{w.terminate();reject(new Error(e.message||'WASM worker error'));};
+    w.postMessage({pass:pw,saltHex:params.salt,t:params.time,m:params.memKiB,p:params.parallelism,dkLen:params.hashLen});
   });
+}
+async function deriveKey(pw){
+  try{ return await deriveKeyWasm(pw); }
+  catch(e){ console.warn('WASM 解密失败，回退纯 JS：'+e.message); return await deriveKeyNoble(pw); }
 }
 const importKey = kb => crypto.subtle.importKey('raw', kb, {name:'AES-CTR'}, false, ['encrypt','decrypt']);
 
@@ -221,10 +227,16 @@ function showToast(msg){
   const t=$('toast'); t.textContent=msg; t.classList.remove('hidden');
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.add('hidden'),4500);
 }
-function showApp(ms){
+function showApp(ms, dbg){
   $('unlock').classList.add('hidden');
   $('app').classList.remove('hidden');
-  if(ms!=null){ lastMs=ms; showToast('✓ 解密完成 · 本次耗时 '+ms+' ms'); }
+  if(ms!=null){
+    lastMs=ms;
+    let msg='✓ 解密完成 · 本次耗时 '+ms+' ms';
+    if(dbg) msg+='（密钥 '+dbg.derive+' · 拉取 '+dbg.fetch+' · AES '+dbg.decrypt+'）';
+    showToast(msg);
+    if(dbg) console.log('[解密耗时] 总 '+ms+'ms | 参数 '+dbg.params+'ms | 密钥 '+dbg.derive+'ms | 拉取 '+dbg.fetch+'ms | AES '+dbg.decrypt+'ms');
+  }
   updateMode();
 }
 
@@ -242,12 +254,22 @@ $('unlockForm').onsubmit = async (e) => {
   const setProg=(pct,text)=>{ $('progBar').style.width=pct+'%'; if(text) $('progText').textContent=text; };
   let n=5; setProg(0,'正在解密… '+n+'s');
   const t0=performance.now();
+  const dbg={params:0,derive:0,fetch:0,decrypt:0};
   const derivePromise=(async()=>{
+    let a=performance.now();
     if(!params) await loadParams();
+    dbg.params=performance.now()-a;
+    a=performance.now();
     const kb=await deriveKey(pw);
-    aesKey=await importKey(kb);
+    dbg.derive=performance.now()-a;
+    a=performance.now();
     const enc=await fetchNotes();
+    dbg.fetch=performance.now()-a;
+    a=performance.now();
+    aesKey=await importKey(kb);
     state=await decryptNotes(enc);
+    dbg.decrypt=performance.now()-a;
+    Object.keys(dbg).forEach(k=>dbg[k]=Math.round(dbg[k]));
   })();
   derivePromise.catch(()=>{});
   const cdPromise=new Promise(res=>{const t=setInterval(()=>{n--;if(n<=0){clearInterval(t);res();}else setProg((5-n)/5*100,'正在解密… '+n+'s');},1000);});
@@ -258,7 +280,7 @@ $('unlockForm').onsubmit = async (e) => {
     await derivePromise;
     const ms=Math.round(performance.now()-t0);
     localStorage.setItem('en_last_ms', String(ms));
-    showApp(ms);
+    showApp(ms, dbg);
     const id=(location.hash||'').replace(/^#\/?/,'') || state.nav[0].id;
     renderPage(id);
   }catch(err){
