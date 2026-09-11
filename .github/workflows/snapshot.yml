@@ -1,0 +1,21 @@
+name: Snapshot Sync
+on:
+  push:
+    branches: [dev]
+permissions:
+  contents: write
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - name: Sync notes from dev
+        run: |
+          git fetch origin dev
+          git checkout origin/dev -- notes.enc.json || echo "no notes yet"
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "snapshot: $(date -u +%Y%m%d%H%M%S)" || echo "No changes"
+          git push origin master
