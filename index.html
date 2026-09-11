@@ -1,7 +1,265 @@
 <!DOCTYPE html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Encrypted Notes</title></head>
-<body style="font-family:system-ui;max-width:40rem;margin:4rem auto;padding:0 1rem">
-<h1>Encrypted Notes</h1>
-<p>前端壳占位。待定稿后替换（markdown-it + Tailwind Typography）。</p>
-</body></html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Encrypted Notes</title>
+<script>
+(function(){try{var s=localStorage.getItem("theme-preference")||"system";var d=window.matchMedia&&window.matchMedia("(prefers-color-scheme:dark)").matches;if(s==="dark")d=true;else if(s==="light")d=false;if(d)document.documentElement.classList.add("dark");else document.documentElement.classList.remove("dark");}catch(e){}})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<script>
+tailwind.config={darkMode:"class",theme:{extend:{
+  colors:{primary:"#3B82F6","bg-light":"#FFFFFF","bg-dark":"#111827","surface-light":"#F9FAFB","surface-dark":"#1F2937","border-light":"#E5E7EB","border-dark":"#374151","text-light":"#1F2937","text-dark":"#F9FAFB","muted-light":"#6B7280","muted-dark":"#9CA3AF"},
+  fontFamily:{sans:["Inter","system-ui","sans-serif"]}
+}}};
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdn.jsdelivr.net/npm/markdown-it@14/dist/markdown-it.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11/highlight.min.js"></script>
+<style>
+*{-webkit-tap-highlight-color:transparent}
+.prose pre{background:#0d1117;border-radius:.5rem;padding:1rem;overflow:auto}
+.prose code{font-size:.85em}
+.nav-active{color:#3B82F6;font-weight:600}
+</style>
+</head>
+<body class="bg-bg-light dark:bg-bg-dark text-text-light dark:text-text-dark font-sans min-h-screen">
+
+<!-- Unlock overlay -->
+<div id="unlock" class="fixed inset-0 z-50 flex items-center justify-center bg-bg-light dark:bg-bg-dark p-6">
+  <div class="w-full max-w-sm rounded-2xl border border-border-light dark:border-border-dark bg-white dark:bg-surface-dark p-6">
+    <h1 class="text-xl font-bold mb-1 flex items-center gap-2"><span class="material-icons text-primary">lock</span> 加密笔记</h1>
+    <p class="text-xs text-muted-light dark:text-muted-dark mb-5">Argon2id 派生 · AES-CTR 解密 · 明文不出浏览器</p>
+    <label class="block text-sm text-muted-light dark:text-muted-dark mb-1.5">密码</label>
+    <input id="pw" type="password" value="password" autocomplete="current-password"
+      class="w-full px-3 py-2.5 rounded-lg border border-border-light dark:border-border-dark bg-surface-light dark:bg-bg-dark text-sm outline-none focus:border-primary mb-3">
+    <label class="block text-sm text-muted-light dark:text-muted-dark mb-1.5">GitHub Token <span class="text-xs">（可选，编辑用）</span></label>
+    <input id="tk" type="password" placeholder="github_pat_..."
+      class="w-full px-3 py-2.5 rounded-lg border border-border-light dark:border-border-dark bg-surface-light dark:bg-bg-dark text-sm outline-none focus:border-primary mb-4">
+    <button id="btnUnlock" class="w-full py-2.5 rounded-lg bg-primary hover:bg-blue-600 text-white text-sm font-semibold transition-colors">解锁</button>
+    <div id="unlockMsg" class="text-xs mt-3 min-h-[16px]"></div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app" class="hidden min-h-screen">
+  <header class="sticky top-0 z-30 flex items-center gap-2 h-12 px-4 border-b border-border-light dark:border-border-dark bg-bg-light dark:bg-bg-dark">
+    <button id="menu" class="lg:hidden p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark"><span class="material-icons text-lg">menu</span></button>
+    <span class="text-sm font-bold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">encrypted_notes</span>
+    <span id="pageTitle" class="text-xs text-muted-light dark:text-muted-dark truncate"></span>
+    <div class="flex-1"></div>
+    <button id="btnEdit" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="编辑"><span class="material-icons text-lg">edit</span></button>
+    <button id="btnReload" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="刷新"><span class="material-icons text-lg">refresh</span></button>
+    <button id="btnLock" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="锁定"><span class="material-icons text-lg">lock</span></button>
+    <button id="theme-toggle" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="主题"><span class="material-icons text-lg" data-theme-icon>dark_mode</span></button>
+  </header>
+
+  <div class="flex">
+    <aside id="sidebar" class="hidden lg:block w-60 shrink-0 border-r border-border-light dark:border-border-dark min-h-[calc(100vh-3rem)] p-4">
+      <nav id="nav" class="text-sm space-y-0.5"></nav>
+      <div class="mt-6 pt-4 border-t border-border-light dark:border-border-dark text-xs text-muted-light dark:text-muted-dark">
+        <div id="modeInfo"></div>
+      </div>
+    </aside>
+    <main class="flex-1 min-w-0">
+      <article id="content" class="prose prose-lg dark:prose-invert max-w-3xl mx-auto px-6 py-8"></article>
+    </main>
+  </div>
+</div>
+
+<!-- Editor -->
+<div id="editor" class="hidden fixed inset-0 z-40 bg-black/50 p-0 sm:p-6">
+  <div class="h-full sm:h-auto sm:max-h-full sm:max-w-3xl sm:mx-auto rounded-none sm:rounded-2xl bg-white dark:bg-surface-dark border border-border-light dark:border-border-dark flex flex-col">
+    <div class="flex items-center gap-2 px-4 h-12 border-b border-border-light dark:border-border-dark">
+      <span class="text-sm font-semibold">编辑 · <span id="editId"></span></span>
+      <div class="flex-1"></div>
+      <button id="btnCancel" class="px-3 py-1.5 rounded-lg text-sm text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-bg-dark">取消</button>
+      <button id="btnSave" class="px-4 py-1.5 rounded-lg text-sm font-semibold bg-primary hover:bg-blue-600 text-white">保存到 dev</button>
+    </div>
+    <textarea id="editArea" class="flex-1 w-full resize-none p-4 bg-surface-light dark:bg-bg-dark font-mono text-sm outline-none"></textarea>
+    <div id="saveMsg" class="px-4 py-2 text-xs border-t border-border-light dark:border-border-dark min-h-[32px]"></div>
+  </div>
+</div>
+
+<script type="module">
+import { argon2id } from 'https://cdn.jsdelivr.net/npm/@noble/hashes@2.4.0/argon2.js';
+
+const PARAMS_URL = 'https://raw.githubusercontent.com/teecatt/encrypted_params/main/params.json';
+const NOTES_RAW  = 'https://raw.githubusercontent.com/teecatt/encrypted_notes/dev/notes.enc.json';
+const API_URL    = 'https://api.github.com/repos/teecatt/encrypted_notes/contents/notes.enc.json';
+
+const $ = id => document.getElementById(id);
+let params=null, aesKey=null, state=null, token='', currentId=null, dirty=false;
+
+const bytesToB64 = b => { let s=''; b.forEach(x=>s+=String.fromCharCode(x)); return btoa(s); };
+const b64ToBytes = s => { const bin=atob(s); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; };
+const hexToBytes = h => { const a=new Uint8Array(h.length/2); for(let i=0;i<a.length;i++)a[i]=parseInt(h.substr(i*2,2),16); return a; };
+const utf8ToB64  = s => bytesToB64(new TextEncoder().encode(s));
+
+const md = markdownit({
+  html:false, linkify:true, typographer:true,
+  highlight(str, lang){
+    if(lang && hljs.getLanguage(lang)){
+      try{ return '<pre class="hljs"><code>'+hljs.highlight(str,{language:lang,ignoreIllegals:true}).value+'</code></pre>'; }catch(e){}
+    }
+    return '<pre class="hljs"><code>'+str.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))+'</code></pre>';
+  }
+});
+
+async function loadParams(){
+  const r = await fetch(PARAMS_URL, {cache:'no-store'});
+  if(!r.ok) throw new Error('params 加载失败 '+r.status);
+  params = await r.json();
+}
+
+async function deriveKey(pw){
+  const salt = hexToBytes(params.salt);
+  const pass = new TextEncoder().encode(pw);
+  // yield a paint before the heavy sync computation
+  await new Promise(r=>setTimeout(r,30));
+  return argon2id(pass, salt, {t:params.time, m:params.memKiB, p:params.parallelism, dkLen:params.hashLen});
+}
+const importKey = kb => crypto.subtle.importKey('raw', kb, {name:'AES-CTR'}, false, ['encrypt','decrypt']);
+
+async function decryptNotes(enc){
+  const iv = b64ToBytes(enc.iv), ct = b64ToBytes(enc.ct);
+  const pt = new Uint8Array(await crypto.subtle.decrypt({name:'AES-CTR', counter:iv, length:128}, aesKey, ct));
+  const magic = new TextDecoder().decode(pt.slice(0,7));
+  if(magic !== params.magic) throw new Error('MAGIC');
+  return JSON.parse(new TextDecoder().decode(pt.slice(7)));
+}
+async function encryptNotes(obj){
+  const data = new TextEncoder().encode(params.magic + JSON.stringify(obj));
+  const iv = crypto.getRandomValues(new Uint8Array(16));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({name:'AES-CTR', counter:iv, length:128}, aesKey, data));
+  return {v:1, alg:'AES-CTR-256', iv:bytesToB64(iv), ct:bytesToB64(ct)};
+}
+
+async function fetchNotes(){
+  const r = await fetch(NOTES_RAW + '?t=' + Date.now(), {cache:'no-store'});
+  if(!r.ok) throw new Error('笔记加载失败 '+r.status);
+  return await r.json();
+}
+
+function renderNav(){
+  const nav=$('nav'); nav.innerHTML='';
+  const add = (items, depth) => {
+    for(const it of items){
+      const a=document.createElement('a');
+      a.href='#'+it.id; a.dataset.id=it.id;
+      a.className='block py-1.5 rounded hover:bg-surface-light dark:hover:bg-surface-dark text-muted-light dark:text-muted-dark';
+      a.style.paddingLeft=(8+depth*14)+'px';
+      a.textContent=it.title;
+      if(it.id===currentId) a.classList.add('nav-active');
+      nav.appendChild(a);
+      if(it.children) add(it.children, depth+1);
+    }
+  };
+  add(state.nav, 0);
+}
+
+function renderPage(id){
+  if(!state.pages[id]){ currentId=state.nav[0]?.id; id=currentId; }
+  currentId=id;
+  $('pageTitle').textContent = state.pages[id] ? id : '';
+  $('content').innerHTML = md.render(state.pages[id] || '*(空)*');
+  renderNav();
+}
+
+function showApp(){
+  $('unlock').classList.add('hidden');
+  $('app').classList.remove('hidden');
+  const editable = !!token;
+  $('btnEdit').style.opacity = editable ? '1' : '.4';
+  $('btnEdit').title = editable ? '编辑' : '需要 Token 才能编辑';
+  $('modeInfo').textContent = editable ? '可编辑 · 提交到 dev' : '只读（未提供 Token）';
+}
+
+/* ── unlock ── */
+$('btnUnlock').onclick = async () => {
+  const pw=$('pw').value; token=$('tk').value.trim();
+  if(!pw){ $('unlockMsg').textContent='请输入密码'; $('unlockMsg').className='text-xs mt-3 text-red-500'; return; }
+  $('btnUnlock').disabled=true;
+  $('unlockMsg').textContent='派生密钥中（Argon2id '+(params?params.memMiB:512)+' MiB，可能数秒）…';
+  $('unlockMsg').className='text-xs mt-3 text-yellow-500';
+  try{
+    if(!params) await loadParams();
+    const kb = await deriveKey(pw);
+    aesKey = await importKey(kb);
+    const enc = await fetchNotes();
+    state = await decryptNotes(enc);
+    if(token) sessionStorage.setItem('en_token', token);
+    showApp();
+    const id=(location.hash||'').replace(/^#\/?/,'') || state.nav[0].id;
+    renderPage(id);
+  }catch(e){
+    if(e.message==='MAGIC'){ $('unlockMsg').textContent='密码错误或数据损坏'; }
+    else { $('unlockMsg').textContent='解锁失败：'+e.message; }
+    $('unlockMsg').className='text-xs mt-3 text-red-500';
+  }finally{ $('btnUnlock').disabled=false; }
+};
+
+/* ── edit / save ── */
+$('btnEdit').onclick = () => {
+  if(!token){ alert('未提供 Token，只能查看。锁定后重新输入 Token 即可编辑。'); return; }
+  $('editId').textContent=currentId;
+  $('editArea').value=state.pages[currentId]||'';
+  $('saveMsg').textContent='';
+  $('editor').classList.remove('hidden');
+};
+$('btnCancel').onclick = () => $('editor').classList.add('hidden');
+
+$('btnSave').onclick = async () => {
+  const text=$('editArea').value;
+  state.pages[currentId]=text;
+  $('btnSave').disabled=true;
+  $('saveMsg').textContent='加密并提交中…';
+  $('saveMsg').className='px-4 py-2 text-xs border-t border-border-light dark:border-border-dark min-h-[32px] text-yellow-500';
+  try{
+    const enc=await encryptNotes(state);
+    const body=JSON.stringify(enc,null,2)+'\n';
+    const auth={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'};
+    const g=await fetch(API_URL+'?ref=dev&t='+Date.now(),{headers:auth});
+    if(!g.ok) throw new Error('读取文件信息失败 '+g.status);
+    const meta=await g.json();
+    const put=await fetch(API_URL,{method:'PUT',headers:{...auth,'Content-Type':'application/json'},
+      body:JSON.stringify({message:'update: '+currentId+' @ '+new Date().toISOString(),content:utf8ToB64(body),branch:'dev',sha:meta.sha})});
+    const res=await put.json();
+    if(!put.ok) throw new Error(res.message||('提交失败 '+put.status));
+    $('saveMsg').textContent='✓ 已提交到 dev：'+res.commit.sha.slice(0,7);
+    $('saveMsg').className='px-4 py-2 text-xs border-t border-border-light dark:border-border-dark min-h-[32px] text-green-500';
+    renderPage(currentId);
+    setTimeout(()=>$('editor').classList.add('hidden'),700);
+  }catch(e){
+    $('saveMsg').textContent='✗ '+e.message;
+    $('saveMsg').className='px-4 py-2 text-xs border-t border-border-light dark:border-border-dark min-h-[32px] text-red-500';
+  }finally{ $('btnSave').disabled=false; }
+};
+
+$('btnReload').onclick = async () => {
+  try{ const enc=await fetchNotes(); state=await decryptNotes(enc); renderPage(currentId); }
+  catch(e){ alert('刷新失败：'+e.message); }
+};
+$('btnLock').onclick = () => { sessionStorage.removeItem('en_token'); location.reload(); };
+$('menu').onclick = () => $('sidebar').classList.toggle('hidden');
+
+/* ── theme ── */
+(function(){
+  const K='theme-preference';
+  const get=()=>localStorage.getItem(K)||'system';
+  const apply=p=>{const d=p==='dark'||(p==='system'&&matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.classList.toggle('dark',d);document.querySelectorAll('[data-theme-icon]').forEach(e=>e.textContent=d?'light_mode':'dark_mode');};
+  apply(get());
+  $('theme-toggle').onclick=()=>{const n=get()==='dark'?'light':'dark';localStorage.setItem(K,n);apply(n);};
+})();
+
+window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||'').replace(/^#\/?/,'')); });
+
+/* preload params so unlock message is accurate */
+loadParams().catch(()=>{});
+</script>
+</body>
+</html>
