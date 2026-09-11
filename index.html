@@ -31,18 +31,16 @@ tailwind.config={darkMode:"class",theme:{extend:{
 
 <!-- Unlock overlay -->
 <div id="unlock" class="fixed inset-0 z-50 flex items-center justify-center bg-bg-light dark:bg-bg-dark p-6">
-  <div class="w-full max-w-sm rounded-2xl border border-border-light dark:border-border-dark bg-white dark:bg-surface-dark p-6">
+  <form id="unlockForm" class="w-full max-w-sm rounded-2xl border border-border-light dark:border-border-dark bg-white dark:bg-surface-dark p-6">
     <h1 class="text-xl font-bold mb-1 flex items-center gap-2"><span class="material-icons text-primary">lock</span> 加密笔记</h1>
     <p class="text-xs text-muted-light dark:text-muted-dark mb-5">Argon2id 派生 · AES-CTR 解密 · 明文不出浏览器</p>
     <label class="block text-sm text-muted-light dark:text-muted-dark mb-1.5">密码</label>
-    <input id="pw" type="password" value="password" autocomplete="current-password"
-      class="w-full px-3 py-2.5 rounded-lg border border-border-light dark:border-border-dark bg-surface-light dark:bg-bg-dark text-sm outline-none focus:border-primary mb-3">
-    <label class="block text-sm text-muted-light dark:text-muted-dark mb-1.5">GitHub Token <span class="text-xs">（可选，编辑用）</span></label>
-    <input id="tk" type="password" placeholder="github_pat_..."
-      class="w-full px-3 py-2.5 rounded-lg border border-border-light dark:border-border-dark bg-surface-light dark:bg-bg-dark text-sm outline-none focus:border-primary mb-4">
-    <button id="btnUnlock" class="w-full py-2.5 rounded-lg bg-primary hover:bg-blue-600 text-white text-sm font-semibold transition-colors">解锁</button>
+    <input id="pw" type="password" placeholder="输入密码，回车解锁" autocomplete="current-password"
+      class="w-full px-3 py-2.5 rounded-lg border border-border-light dark:border-border-dark bg-surface-light dark:bg-bg-dark text-sm outline-none focus:border-primary mb-1">
+    <div class="text-xs text-muted-light dark:text-muted-dark mb-4">demo 密码：<code>password</code></div>
+    <button id="btnUnlock" type="submit" class="w-full py-2.5 rounded-lg bg-primary hover:bg-blue-600 text-white text-sm font-semibold transition-colors">解锁</button>
     <div id="unlockMsg" class="text-xs mt-3 min-h-[16px]"></div>
-  </div>
+  </form>
 </div>
 
 <!-- App -->
@@ -83,6 +81,20 @@ tailwind.config={darkMode:"class",theme:{extend:{
     <textarea id="editArea" class="flex-1 w-full resize-none p-4 bg-surface-light dark:bg-bg-dark font-mono text-sm outline-none"></textarea>
     <div id="saveMsg" class="px-4 py-2 text-xs border-t border-border-light dark:border-border-dark min-h-[32px]"></div>
   </div>
+</div>
+
+<!-- Token prompt (shown only when editing) -->
+<div id="tokenModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6">
+  <form id="tokenForm" class="w-full max-w-sm rounded-2xl border border-border-light dark:border-border-dark bg-white dark:bg-surface-dark p-6">
+    <h2 class="text-base font-bold mb-1 flex items-center gap-2"><span class="material-icons text-primary">key</span> 需要 GitHub Token</h2>
+    <p class="text-xs text-muted-light dark:text-muted-dark mb-4">仅用于把加密笔记提交到 <code>encrypted_notes</code> 的 <code>dev</code> 分支，只存内存，不落盘。</p>
+    <input id="tk" type="password" placeholder="github_pat_..." autocomplete="off"
+      class="w-full px-3 py-2.5 rounded-lg border border-border-light dark:border-border-dark bg-surface-light dark:bg-bg-dark text-sm outline-none focus:border-primary mb-3">
+    <div class="flex gap-2">
+      <button type="button" id="tkCancel" class="flex-1 py-2.5 rounded-lg border border-border-light dark:border-border-dark text-sm text-muted-light dark:text-muted-dark">取消</button>
+      <button type="submit" class="flex-1 py-2.5 rounded-lg bg-primary hover:bg-blue-600 text-white text-sm font-semibold">确认</button>
+    </div>
+  </form>
 </div>
 
 <script type="module">
@@ -170,18 +182,22 @@ function renderPage(id){
   renderNav();
 }
 
+function updateMode(){
+  const editable = !!token;
+  $('btnEdit').style.opacity = editable ? '1' : '.55';
+  $('btnEdit').title = editable ? '编辑' : '编辑时输入 Token';
+  $('modeInfo').textContent = editable ? '可编辑 · 提交到 dev' : '只读 · 编辑时输入 Token';
+}
 function showApp(){
   $('unlock').classList.add('hidden');
   $('app').classList.remove('hidden');
-  const editable = !!token;
-  $('btnEdit').style.opacity = editable ? '1' : '.4';
-  $('btnEdit').title = editable ? '编辑' : '需要 Token 才能编辑';
-  $('modeInfo').textContent = editable ? '可编辑 · 提交到 dev' : '只读（未提供 Token）';
+  updateMode();
 }
 
 /* ── unlock ── */
-$('btnUnlock').onclick = async () => {
-  const pw=$('pw').value; token=$('tk').value.trim();
+$('unlockForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const pw=$('pw').value;
   if(!pw){ $('unlockMsg').textContent='请输入密码'; $('unlockMsg').className='text-xs mt-3 text-red-500'; return; }
   $('btnUnlock').disabled=true;
   $('unlockMsg').textContent='派生密钥中（Argon2id '+(params?params.memMiB:512)+' MiB，可能数秒）…';
@@ -192,7 +208,6 @@ $('btnUnlock').onclick = async () => {
     aesKey = await importKey(kb);
     const enc = await fetchNotes();
     state = await decryptNotes(enc);
-    if(token) sessionStorage.setItem('en_token', token);
     showApp();
     const id=(location.hash||'').replace(/^#\/?/,'') || state.nav[0].id;
     renderPage(id);
@@ -203,9 +218,34 @@ $('btnUnlock').onclick = async () => {
   }finally{ $('btnUnlock').disabled=false; }
 };
 
+/* ── token prompt (only when editing) ── */
+let tokenResolver=null;
+function askToken(){
+  return new Promise(resolve=>{
+    tokenResolver=resolve;
+    $('tk').value='';
+    $('tokenModal').classList.remove('hidden');
+    setTimeout(()=>$('tk').focus(),50);
+  });
+}
+$('tokenForm').onsubmit=(e)=>{
+  e.preventDefault();
+  const t=$('tk').value.trim();
+  $('tokenModal').classList.add('hidden');
+  if(tokenResolver){ tokenResolver(t); tokenResolver=null; }
+};
+$('tkCancel').onclick=()=>{
+  $('tokenModal').classList.add('hidden');
+  if(tokenResolver){ tokenResolver(''); tokenResolver=null; }
+};
+
 /* ── edit / save ── */
-$('btnEdit').onclick = () => {
-  if(!token){ alert('未提供 Token，只能查看。锁定后重新输入 Token 即可编辑。'); return; }
+$('btnEdit').onclick = async () => {
+  if(!token){
+    token = await askToken();
+    if(!token) return;
+    updateMode();
+  }
   $('editId').textContent=currentId;
   $('editArea').value=state.pages[currentId]||'';
   $('saveMsg').textContent='';
@@ -224,12 +264,12 @@ $('btnSave').onclick = async () => {
     const body=JSON.stringify(enc,null,2)+'\n';
     const auth={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'};
     const g=await fetch(API_URL+'?ref=dev&t='+Date.now(),{headers:auth});
-    if(!g.ok) throw new Error('读取文件信息失败 '+g.status);
+    if(!g.ok){ if(g.status===401||g.status===403){ token=''; updateMode(); } throw new Error('读取文件信息失败 '+g.status+'（Token 无效或无权限）'); }
     const meta=await g.json();
     const put=await fetch(API_URL,{method:'PUT',headers:{...auth,'Content-Type':'application/json'},
       body:JSON.stringify({message:'update: '+currentId+' @ '+new Date().toISOString(),content:utf8ToB64(body),branch:'dev',sha:meta.sha})});
     const res=await put.json();
-    if(!put.ok) throw new Error(res.message||('提交失败 '+put.status));
+    if(!put.ok){ if(put.status===401||put.status===403){ token=''; updateMode(); } throw new Error(res.message||('提交失败 '+put.status)); }
     $('saveMsg').textContent='✓ 已提交到 dev：'+res.commit.sha.slice(0,7);
     $('saveMsg').className='px-4 py-2 text-xs border-t border-border-light dark:border-border-dark min-h-[32px] text-green-500';
     renderPage(currentId);
@@ -244,7 +284,7 @@ $('btnReload').onclick = async () => {
   try{ const enc=await fetchNotes(); state=await decryptNotes(enc); renderPage(currentId); }
   catch(e){ alert('刷新失败：'+e.message); }
 };
-$('btnLock').onclick = () => { sessionStorage.removeItem('en_token'); location.reload(); };
+$('btnLock').onclick = () => location.reload();
 $('menu').onclick = () => $('sidebar').classList.toggle('hidden');
 
 /* ── theme ── */
