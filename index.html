@@ -76,7 +76,7 @@
     <a id="btnHelp" href="https://down2.top/encrypted_params/about.html" target="_blank" rel="noopener" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="关于 Argon2id 算法" aria-label="关于 Argon2id 算法"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>
     <button id="btnEdit" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="编辑"><span class="material-icons text-lg">edit</span></button>
     <button id="btnReload" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="刷新"><span class="material-icons text-lg">refresh</span></button>
-    <button id="btnLock" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="锁定"><span class="material-icons text-lg">lock</span></button>
+    <button id="btnLock" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="锁定并清除本机密钥/Token"><span class="material-icons text-lg">lock</span></button>
     <button id="theme-toggle" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="主题"><span class="material-icons text-lg" data-theme-icon>dark_mode</span></button>
   </header>
 
@@ -131,7 +131,7 @@ const API_URL    = 'https://api.github.com/repos/teecatt/encrypted_notes/content
 const ARGON2_URL = new URL('vendor/argon2-bundled.min.js', location.href).href;
 
 const $ = id => document.getElementById(id);
-let params=null, aesKey=null, state=null, token='', currentId=null, dirty=false, garbageText=null;
+let params=null, aesKey=null, state=null, token='', currentId=null, dirty=false, garbageText=null, remembered=false;
 
 const bytesToB64 = b => { let s=''; b.forEach(x=>s+=String.fromCharCode(x)); return btoa(s); };
 const b64ToBytes = s => { const bin=atob(s); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; };
@@ -154,9 +154,10 @@ async function loadParams(){
   params = await r.json();
 }
 
-function deriveKeyNoble(pw){
+async function deriveKeyNoble(pw){
   const salt = hexToBytes(params.salt);
-  return argon2id(new TextEncoder().encode(pw), salt, {t:params.time, m:params.memKiB, p:params.parallelism, dkLen:params.hashLen});
+  const raw = argon2id(new TextEncoder().encode(pw), salt, {t:params.time, m:params.memKiB, p:params.parallelism, dkLen:params.hashLen});
+  return await crypto.subtle.importKey('raw', raw, {name:'AES-CTR'}, false, ['encrypt','decrypt']);
 }
 function deriveKeyWasm(pw){
   return new Promise((resolve,reject)=>{
@@ -167,12 +168,13 @@ function deriveKeyWasm(pw){
         "self.onmessage=async function(e){var d=e.data;try{"+
         "var salt=new Uint8Array(d.saltHex.match(/../g).map(function(h){return parseInt(h,16)}));"+
         "var res=await argon2.hash({pass:d.pass,salt:salt,time:d.t,mem:d.m,parallelism:d.p,hashLen:d.dkLen,type:2});"+
-        "self.postMessage({ok:true,hashHex:res.hashHex});"+
+        "var ck=await crypto.subtle.importKey('raw',res.hash,{name:'AES-CTR'},false,['encrypt','decrypt']);"+
+        "self.postMessage({ok:true,key:ck});"+
         "}catch(err){self.postMessage({ok:false,error:String(err&&err.message||err)});}};";
       const url=URL.createObjectURL(new Blob([code],{type:'application/javascript'}));
       w=new Worker(url);
     }catch(err){ return reject(err); }
-    w.onmessage=(e)=>{w.terminate();e.data.ok?resolve(hexToBytes(e.data.hashHex)):reject(new Error(e.data.error));};
+    w.onmessage=(e)=>{w.terminate();e.data.ok?resolve(e.data.key):reject(new Error(e.data.error));};
     w.onerror=(e)=>{w.terminate();reject(new Error(e.message||'WASM worker error'));};
     w.postMessage({pass:pw,saltHex:params.salt,t:params.time,m:params.memKiB,p:params.parallelism,dkLen:params.hashLen});
   });
@@ -182,7 +184,13 @@ async function deriveKey(pw){
   try{ const k=await deriveKeyWasm(pw); lastEngine='wasm'; return k; }
   catch(e){ console.warn('WASM 解密失败，回退纯 JS：'+e.message); lastEngine='js'; return await deriveKeyNoble(pw); }
 }
-const importKey = kb => crypto.subtle.importKey('raw', kb, {name:'AES-CTR'}, false, ['encrypt','decrypt']);
+
+/* ── 本机存储（IndexedDB：不可导出 CryptoKey + GitHub Token） ── */
+const IDB_NAME='en-keys', IDB_STORE='keys', IDB_KEY='aes', IDB_TOKEN='token';
+function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=()=>{ r.result.createObjectStore(IDB_STORE); }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function idbGet(k){ try{ const db=await idbOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }catch(e){ return null; } }
+async function idbPut(k,v){ const db=await idbOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(IDB_STORE,'readwrite').objectStore(IDB_STORE).put(v,k); q.onsuccess=()=>res(); q.onerror=()=>rej(q.error); }); }
+async function idbDel(k){ try{ const db=await idbOpen(); await new Promise((res,rej)=>{ const q=db.transaction(IDB_STORE,'readwrite').objectStore(IDB_STORE).delete(k); q.onsuccess=()=>res(); q.onerror=()=>rej(q.error); }); }catch(e){} }
 
 async function decryptToText(enc){
   const iv = b64ToBytes(enc.iv), ct = b64ToBytes(enc.ct);
@@ -246,7 +254,11 @@ function renderPage(id){
 
 let lastMs=parseInt(localStorage.getItem('en_last_ms')||'0',10)||0;
 function updateMode(){
-  $('modeInfo').textContent = (token?'可编辑 · 保存时提交到 dev':'保存时输入 Token 即可提交') + (lastMs?(' · 上次解密 '+lastMs+' ms'):'');
+  const parts=[token?'可编辑 · 保存时提交到 dev':'保存时输入 Token 即可提交'];
+  if(token) parts.push('Token 已存本机');
+  if(remembered) parts.push('密钥已存本机');
+  if(lastMs) parts.push('上次解密 '+lastMs+' ms');
+  $('modeInfo').textContent=parts.join(' · ');
 }
 let toastTimer=null;
 function showToast(msg){
@@ -263,6 +275,12 @@ function setDebug(dbg){
     'AES   '+dbg.decrypt+' ms\n'+
     '实际  '+dbg.work+' ms';
   console.log('[解密耗时]', dbg, 'engine='+lastEngine);
+}
+function enterApp(){
+  if(state && state.nav){
+    const id=(location.hash||'').replace(/^#\/?/,'') || state.nav[0].id;
+    renderPage(id);
+  } else { renderPage(null); }
 }
 function showApp(dbg){
   $('unlock').classList.add('hidden');
@@ -294,14 +312,13 @@ $('unlockForm').onsubmit = async (e) => {
     if(!params) await loadParams();
     dbg.params=performance.now()-a;
     a=performance.now();
-    const kb=await deriveKey(pw);
+    aesKey=await deriveKey(pw);
     dbg.derive=performance.now()-a;
     setStatus('Fetch ciphertext…');
     a=performance.now();
     const enc=await fetchNotes();
     dbg.fetch=performance.now()-a;
     a=performance.now();
-    aesKey=await importKey(kb);
     setStatus('AES decrypting…');
     const text=await decryptToText(enc);
     dbg.decrypt=performance.now()-a;
@@ -315,13 +332,9 @@ $('unlockForm').onsubmit = async (e) => {
     await derivePromise;
     dbg.total=Math.round(performance.now()-t0);
     localStorage.setItem('en_last_ms', String(dbg.work));
+    try{ await idbPut(IDB_KEY, aesKey); remembered=true; }catch(e){}
     showApp(dbg);
-    if(state && state.nav){
-      const id=(location.hash||'').replace(/^#\/?/,'') || state.nav[0].id;
-      renderPage(id);
-    } else {
-      renderPage(null);
-    }
+    enterApp();
   }catch(err){
     $('arrowIcon').style.display='';
     $('spinIcon').style.display='none';
@@ -346,6 +359,7 @@ $('tokenForm').onsubmit=(e)=>{
   e.preventDefault();
   const t=$('tk').value.trim();
   $('tokenModal').classList.add('hidden');
+  if(t){ idbPut(IDB_TOKEN,t).catch(()=>{}); }
   if(tokenResolver){ tokenResolver(t); tokenResolver=null; }
 };
 $('tkCancel').onclick=()=>{
@@ -399,7 +413,7 @@ $('btnReload').onclick = async () => {
   try{ const enc=await fetchNotes(); const text=await decryptToText(enc); const r=interpretPlaintext(text); state=r.state; garbageText=r.garbage; renderPage(currentId); }
   catch(e){ alert('刷新失败：'+e.message); }
 };
-$('btnLock').onclick = () => location.reload();
+$('btnLock').onclick = async () => { await idbDel(IDB_KEY); await idbDel(IDB_TOKEN); location.reload(); };
 $('menu').onclick = () => $('sidebar').classList.toggle('hidden');
 
 /* ── theme ── */
@@ -413,8 +427,24 @@ $('menu').onclick = () => $('sidebar').classList.toggle('hidden');
 
 window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||'').replace(/^#\/?/,'')); });
 
-/* preload params so unlock message is accurate */
-loadParams().catch(()=>{});
+/* preload params + try auto-unlock with key stored on this device */
+(async function autoUnlock(){
+  try{
+    if(!params) await loadParams();
+    const k=await idbGet(IDB_KEY);
+    if(!k) return;
+    const t=await idbGet(IDB_TOKEN);
+    if(t) token=t;
+    aesKey=k; remembered=true;
+    const enc=await fetchNotes();
+    const text=await decryptToText(enc);
+    const r=interpretPlaintext(text);
+    state=r.state; garbageText=r.garbage;
+    showApp(null);
+    showToast('已用本机保存的密钥解锁');
+    enterApp();
+  }catch(e){ console.warn('自动解锁失败', e); }
+})();
 </script>
 </body>
 </html>
