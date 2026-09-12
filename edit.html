@@ -40,6 +40,9 @@ html.dark .i-sun{display:none}
 .brand{font-size:14px;font-weight:700;white-space:nowrap}
 .dirty-dot{width:8px;height:8px;border-radius:50%;background:#eab308;flex:0 0 auto}
 .spacer{flex:1 1 auto}
+.desc-inline{width:170px;padding:7px 10px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:13px;outline:none}
+.desc-inline:focus{border-color:var(--fg)}
+@media(max-width:640px){.desc-inline{width:110px}}
 #app{display:flex;flex-direction:column;height:100vh}
 
 /* layout */
@@ -108,8 +111,8 @@ html.dark .i-sun{display:none}
 .pw-input{width:100%;margin-top:16px;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:14px;outline:none}
 .pw-input:focus{border-color:var(--fg)}
 html.dark .pw-input{background:#0d0d0d}
-#gatePw{background:rgba(0,0,0,.7);color:#fff}
-#gatePw::placeholder{color:rgba(255,255,255,.55)}
+#gatePw{background:var(--bg);color:var(--fg)}
+#gatePw::placeholder{color:var(--muted)}
 .overlay{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:20px}
 .card{width:100%;max-width:400px;background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow)}
 .card h2{margin:0 0 10px;font-size:16px;display:flex;align-items:center;gap:8px}
@@ -148,6 +151,7 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
     <span class="brand">编辑</span>
     <span id="dirtyDot" class="dirty-dot hidden" title="有未保存的修改"></span>
     <span class="spacer"></span>
+    <input id="descInline" class="desc-inline hidden" placeholder="提交描述（可选）" title="提交描述（可选）">
     <button id="btnSave" class="btn btn-primary" title="保存到 dev（Ctrl/Cmd+S）"><svg viewBox="0 0 24 24" fill="currentColor" style="width:17px;height:17px"><path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z"/></svg><span>保存</span></button>
     <button id="btnSettings" class="icon-btn" title="设置" aria-label="设置"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></svg></button>
     <button id="theme-toggle" class="icon-btn" title="主题" aria-label="主题"><svg class="i-sun" viewBox="0 -960 960 960" fill="currentColor"><path d="M480-360q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35Zm0 80q-83 0-141.5-58.5T280-480q0-83 58.5-141.5T480-680q83 0 141.5 58.5T680-480q0 83-58.5 141.5T480-280ZM80-440q-17 0-28.5-11.5T40-480q0-17 11.5-28.5T80-520h80q17 0 28.5 11.5T200-480q0 17-11.5 28.5T160-440H80Zm720 0q-17 0-28.5-11.5T760-480q0-17 11.5-28.5T800-520h80q17 0 28.5 11.5T920-480q0 17-11.5 28.5T880-440h-80ZM480-760q-17 0-28.5-11.5T440-800v-80q0-17 11.5-28.5T480-920q17 0 28.5 11.5T520-880v80q0 17-11.5 28.5T480-760Zm0 720q-17 0-28.5-11.5T440-80v-80q0-17 11.5-28.5T480-200q17 0 28.5 11.5T520-160v80q0 17-11.5 28.5T480-40ZM226-678l-43-42q-12-11-11.5-28t11.5-29q12-12 29-12t28 12l42 43q11 12 11 28t-11 28q-11 12-27.5 11.5T226-678Zm494 495-42-43q-11-12-11-28.5t11-27.5q11-12 27.5-11.5T734-282l43 42q12 11 11.5 28T777-183q-12 12-29 12t-28-12Zm-42-495q-12-11-11.5-27.5T678-734l42-43q11-12 28-11.5t29 11.5q12 12 12 29t-12 28l-43 42q-12 11-28 11t-28-11ZM183-183q-12-12-12-29t12-28l43-42q12-11 28.5-11t27.5 11q12 11 11.5 27.5T282-226l-42 43q-11 12-28 11.5T183-183Zm297-297Z"/></svg><svg class="i-moon" viewBox="0 -960 960 960" fill="currentColor"><path d="M480-120q-151 0-255.5-104.5T120-480q0-138 90-239.5T440-838q13-2 23 3.5t16 14.5q6 9 6.5 21t-7.5 23q-17 26-25.5 55t-8.5 61q0 90 63 153t153 63q31 0 61.5-9t54.5-25q11-7 22.5-6.5T819-479q10 5 15.5 15t3.5 24q-14 138-117.5 229T480-120Zm0-80q88 0 158-48.5T740-375q-20 5-40 8t-40 3q-123 0-209.5-86.5T364-660q0-20 3-40t8-40q-78 32-126.5 102T200-480q0 116 82 198t198 82Zm-10-270Z"/></svg></button>
@@ -188,10 +192,9 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
 <!-- Settings -->
 <div id="settingsModal" class="hidden overlay">
   <form id="settingsForm" class="card">
-    <h2><svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px"><path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></svg> 自动缓存设置</h2>
-    <p>未点「保存」前，编辑器内容会缓存到本机浏览器；此设置控制缓存时机。</p>
+    <h2><svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px"><path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></svg> 设置</h2>
     <div class="setting">
-      <label>触发方式</label>
+      <label>自动缓存触发方式</label>
       <div class="row">
         <label><input type="radio" name="asmode" value="timeout"> 超时</label>
         <label><input type="radio" name="asmode" value="blur"> 焦点改变</label>
@@ -201,6 +204,12 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
       <label>超时时间（秒，1 – 86400）</label>
       <input id="asSeconds" type="number" min="1" max="86400" step="1">
     </div>
+    <div class="setting">
+      <label>保存时</label>
+      <div class="row">
+        <label><input type="checkbox" id="skipDesc"> 跳过描述弹窗（改为在保存按钮旁显示描述输入框）</label>
+      </div>
+    </div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button type="button" id="setCancel" class="btn" style="flex:1">取消</button>
       <button type="submit" class="btn btn-primary" style="flex:1">保存</button>
@@ -208,15 +217,21 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
   </form>
 </div>
 
-<!-- Token prompt -->
-<div id="tokenModal" class="hidden overlay">
-  <form id="tokenForm" class="card">
-    <h2><svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px"><path d="M7 14C5.9 14 5 13.1 5 12S5.9 10 7 10 9 10.9 9 12 8.1 14 7 14M12.6 10C11.8 7.7 9.6 6 7 6C3.7 6 1 8.7 1 12S3.7 18 7 18C9.6 18 11.8 16.3 12.6 14H16V18H20V14H23V10H12.6Z"/></svg> 需要 GitHub Token</h2>
-    <p>仅用于把加密笔记提交到 <code>encrypted_notes</code> 的 <code>dev</code> 分支，只存本机。</p>
-    <input id="tk" type="password" class="pw-input" style="text-align:left;margin-top:6px" placeholder="github_pat_..." autocomplete="off">
+<!-- Save dialog -->
+<div id="saveModal" class="hidden overlay">
+  <form id="saveForm" class="card">
+    <h2><svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px"><path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z"/></svg> 保存到 dev</h2>
+    <div id="descField" class="setting">
+      <label>提交描述（可选）</label>
+      <textarea id="saveDesc" rows="3" placeholder="将附加在 commit 信息末尾" style="width:100%;padding:9px 11px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:14px;outline:none;resize:vertical;font-family:inherit"></textarea>
+    </div>
+    <div id="tokenField" class="setting">
+      <label>GitHub Token</label>
+      <input id="tk" type="password" class="pw-input" style="text-align:left;margin-top:0" placeholder="github_pat_..." autocomplete="off">
+    </div>
     <div style="display:flex;gap:8px;margin-top:16px">
-      <button type="button" id="tkCancel" class="btn" style="flex:1">取消</button>
-      <button type="submit" class="btn btn-primary" style="flex:1">确认</button>
+      <button type="button" id="saveCancel" class="btn" style="flex:1">取消</button>
+      <button type="submit" class="btn btn-primary" style="flex:1">确认保存</button>
     </div>
   </form>
 </div>
@@ -351,8 +366,9 @@ function draftKey(id){ return 'en-draft:'+id; }
 function loadDraft(id){ try{ const d=JSON.parse(localStorage.getItem(draftKey(id))||'null'); return d&&typeof d.c==='string'?d:null; }catch(e){ return null; } }
 function clearDraft(id){ try{ localStorage.removeItem(draftKey(id)); }catch(e){} }
 let autosaveCfg = loadCfg();
-function loadCfg(){ try{ const c=JSON.parse(localStorage.getItem('en-autosave')||'{}'); return {mode:(c.mode==='blur'?'blur':'timeout'), seconds:Math.min(86400,Math.max(1,parseInt(c.seconds,10)||30))}; }catch(e){ return {mode:'timeout',seconds:30}; } }
+function loadCfg(){ try{ const c=JSON.parse(localStorage.getItem('en-autosave')||'{}'); return {mode:(c.mode==='blur'?'blur':'timeout'), seconds:Math.min(86400,Math.max(1,parseInt(c.seconds,10)||30)), skipDesc:!!c.skipDesc}; }catch(e){ return {mode:'timeout',seconds:30,skipDesc:false}; } }
 function saveCfg(c){ autosaveCfg=c; try{ localStorage.setItem('en-autosave', JSON.stringify(c)); }catch(e){} }
+function applySaveUI(){ const el=$('descInline'); if(el) el.classList.toggle('hidden', !autosaveCfg.skipDesc); }
 
 let autosaveTimer=null;
 function cancelAutosave(){ if(autosaveTimer){ clearTimeout(autosaveTimer); autosaveTimer=null; } }
@@ -482,6 +498,7 @@ $('btnSettings').onclick=()=>{
   document.querySelector(`input[name=asmode][value="${autosaveCfg.mode}"]`).checked=true;
   $('asSeconds').value=autosaveCfg.seconds;
   $('asSeconds').disabled = autosaveCfg.mode!=='timeout';
+  $('skipDesc').checked = autosaveCfg.skipDesc;
   $('settingsModal').classList.remove('hidden');
 };
 document.querySelectorAll('input[name=asmode]').forEach(r=>r.onchange=()=>{ $('asSeconds').disabled = document.querySelector('input[name=asmode]:checked').value!=='timeout'; });
@@ -491,27 +508,59 @@ $('settingsForm').onsubmit=(e)=>{
   const mode=document.querySelector('input[name=asmode]:checked').value;
   let sec=parseInt($('asSeconds').value,10); if(!isFinite(sec)) sec=30;
   sec=Math.min(86400, Math.max(1, sec));
-  saveCfg({mode, seconds:sec});
+  saveCfg({mode, seconds:sec, skipDesc:$('skipDesc').checked});
   cancelAutosave(); scheduleAutosave();
   $('settingsModal').classList.add('hidden');
-  updateAutosaveInfo();
+  applySaveUI(); updateAutosaveInfo();
   showToast('设置已保存');
 };
 
 /* save to dev */
-let tokenResolver=null;
-function askToken(){
-  return new Promise(resolve=>{ tokenResolver=resolve; $('tk').value=''; $('tokenModal').classList.remove('hidden'); setTimeout(()=>$('tk').focus(),50); });
+let saveResolver=null;
+function askSave(needDesc, needToken){
+  return new Promise(resolve=>{
+    saveResolver=resolve;
+    $('descField').classList.toggle('hidden', !needDesc);
+    $('tokenField').classList.toggle('hidden', !needToken);
+    $('saveDesc').value='';
+    $('tk').value='';
+    $('saveModal').classList.remove('hidden');
+    setTimeout(()=>{ (needDesc?$('saveDesc'):$('tk')).focus(); },50);
+  });
 }
-$('tokenForm').onsubmit=(e)=>{ e.preventDefault(); const t=$('tk').value.trim(); $('tokenModal').classList.add('hidden'); if(t) idbPut(IDB_TOKEN,t).catch(()=>{}); if(tokenResolver){ tokenResolver(t); tokenResolver=null; } };
-$('tkCancel').onclick=()=>{ $('tokenModal').classList.add('hidden'); if(tokenResolver){ tokenResolver(''); tokenResolver=null; } };
+$('saveForm').onsubmit=(e)=>{
+  e.preventDefault();
+  const needDesc=!$('descField').classList.contains('hidden');
+  const needToken=!$('tokenField').classList.contains('hidden');
+  const desc=needDesc?$('saveDesc').value.trim():'';
+  const t=needToken?$('tk').value.trim():'';
+  $('saveModal').classList.add('hidden');
+  if(t) idbPut(IDB_TOKEN,t).catch(()=>{});
+  if(saveResolver){ saveResolver({desc, token:t}); saveResolver=null; }
+};
+$('saveCancel').onclick=()=>{
+  $('saveModal').classList.add('hidden');
+  if(saveResolver){ saveResolver(null); saveResolver=null; }
+};
 
 async function save(){
   if(!state){ return; }
-  if(!token){ token=await askToken(); if(!token) return; }
+  let desc='';
+  const needDesc=!autosaveCfg.skipDesc;
+  const needToken=!token;
+  if(needDesc || needToken){
+    const r=await askSave(needDesc, needToken);
+    if(!r) return;
+    desc=r.desc;
+    if(needToken){ if(!r.token) return; token=r.token; }
+  } else {
+    desc=$('descInline').value.trim();
+  }
   state.pages[currentId]=$('ta').value;
   $('btnSave').disabled=true;
   setStatus('加密并提交中…','warn');
+  const base='update: '+currentId+' @ '+new Date().toISOString();
+  const message=desc?base+'\n\n'+desc:base;
   try{
     const enc=await encryptNotes(state);
     const body=JSON.stringify(enc,null,2)+'\n';
@@ -520,11 +569,12 @@ async function save(){
     if(!g.ok){ if(g.status===401||g.status===403){ token=''; } throw new Error('读取文件信息失败 '+g.status+'（Token 无效或无权限）'); }
     const meta=await g.json();
     const put=await fetch(API_URL,{method:'PUT',headers:{...auth,'Content-Type':'application/json'},
-      body:JSON.stringify({message:'update: '+currentId+' @ '+new Date().toISOString(),content:utf8ToB64(body),branch:'dev',sha:meta.sha})});
+      body:JSON.stringify({message, content:utf8ToB64(body), branch:'dev', sha:meta.sha})});
     const res=await put.json();
     if(!put.ok){ if(put.status===401||put.status===403){ token=''; } throw new Error(res.message||('提交失败 '+put.status)); }
     clearDraft(currentId); cancelAutosave();
     markDirty(false); updateAutosaveInfo();
+    if($('descInline')) $('descInline').value='';
     setStatus('已提交到 dev：'+res.commit.sha.slice(0,7),'ok');
     showToast('已保存到 dev');
   }catch(e){
@@ -568,6 +618,7 @@ $('gateForm').onsubmit = async (e)=>{
 function showEditor(){
   $('gate').classList.add('hidden');
   $('app').classList.remove('hidden');
+  applySaveUI();
   const id=(location.hash||'').replace(/^#\/?/,'') || state.nav[0].id;
   selectNote(id, true);
 }
