@@ -662,7 +662,7 @@ $('saveForm').onsubmit=(e)=>{
 $('saveCancel').onclick=()=>{ $('saveModal').classList.add('hidden'); if(saveResolver){ saveResolver(null); saveResolver=null; } };
 
 async function save(){
-  if(!state) return;
+  if(!state){ showToast('尚未解锁或没有数据'); return; }
   const local=stateToNotes();
   const changed=[], removed=[];
   for(const id in local){
@@ -783,14 +783,14 @@ function showEditor(){
   selectNote(id,true);
 }
 async function fullLoad(){
-  const remote=await S.remoteNotes(token);
+  const remote=await S.remoteNotes(token, true);
   const notes={};
   for(const e of remote){
     try{
       const p=S.parseNote(await S.decryptText((await S.fetchNote(e.path)).trim()));
       if(!p) continue;
       notes[e.id]={id:e.id,title:p.title,content:p.content,order:p.order,ancestors:S.ancestorsFromPath(e.path)};
-      meta[e.id]={sha:e.sha,path:e.path};
+      meta[e.id]={sha:/^[0-9a-f]{40}$/.test(e.sha||'')?e.sha:null, path:e.path};
     }catch(err){ console.warn('跳过',e.path,err); }
   }
   cloudNotes=JSON.parse(JSON.stringify(notes));
@@ -805,13 +805,13 @@ $('gateForm').onsubmit=async(e)=>{
   try{
     await S.loadParams();
     const key=await S.deriveKey(pw);
-    const remote=await S.remoteNotes('');
+    { const t=await idbGet(IDB_TOKEN); token=t||''; }
+    const remote=await S.remoteNotes(token, true);
     if(remote.length){
       const p=S.parseNote(await S.decryptText((await S.fetchNote(remote[0].path)).trim()));
       if(!p){ $('gateMsg').textContent='密码错误或数据损坏'; btn.disabled=false; return; }
     }
     try{ await idbPut(IDB_KEY,key); }catch(err){}
-    const t=await idbGet(IDB_TOKEN); if(t) token=t;
     await fullLoad(); showEditor();
   }catch(err){ $('gateMsg').textContent='失败：'+err.message; btn.disabled=false; }
 };
@@ -826,8 +826,8 @@ $('gateForm').onsubmit=async(e)=>{
     const cmeta=await S.cacheGet('meta'); if(cmeta) meta=cmeta;
     const ccloud=await S.cacheGet('cloud'); if(ccloud) cloudNotes=ccloud;
     const cached=await S.cacheGet('state');
-    if(cached){ state=cached; showEditor(); }
-    else { await fullLoad(); showEditor(); }
+    if(cached && cached.nav){ state=cached; showEditor(); }
+    else { try{ await fullLoad(); }catch(err){ console.warn('拉取失败',err); applyNotes({}); } showEditor(); }
   }catch(e){ console.warn(e); showGate(); }
 })();
 </script>
