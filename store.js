@@ -136,7 +136,14 @@ async function gh(method,path,body,token){
 export async function putNote(path, b64text, sha, token, message){
   const payload={message, content:bytesToB64(new TextEncoder().encode(b64text+'\n')), branch:BRANCH};
   if(sha) payload.sha=sha;
-  const j=await gh('PUT','/contents/'+path,payload,token);
+  let j;
+  try{ j=await gh('PUT','/contents/'+path,payload,token); }
+  catch(e){
+    // stale/missing sha -> fetch current and retry once
+    const cur=await gh('GET','/contents/'+path+'?ref='+BRANCH,null,token).catch(()=>null);
+    if(cur&&cur.sha){ payload.sha=cur.sha; j=await gh('PUT','/contents/'+path,payload,token); }
+    else throw e;
+  }
   return j.content&&j.content.sha;
 }
 export async function deletePath(path, sha, token, message){
