@@ -52,6 +52,10 @@ html.dark .i-sun{display:none}
 .nav-link{display:block;padding:6px 9px;border-radius:7px;font-size:13.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .nav-link:hover{background:var(--hover);color:var(--fg)}
 .nav-link.active{font-weight:600;color:var(--fg);background:var(--hover)}
+.nav-tools{display:flex;flex-wrap:wrap;gap:2px;margin-bottom:8px}
+.ntbtn{width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;color:var(--muted)}
+.ntbtn:hover{background:var(--hover);color:var(--fg)}
+.ntbtn svg{width:17px;height:17px}
 .scrim{position:fixed;inset:0;z-index:35;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .2s}
 .scrim.show{opacity:1;pointer-events:auto}
 
@@ -133,10 +137,10 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
 .tl-head{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px}
 .tl-head svg{width:14px;height:14px}
 .tl-empty{font-size:12px;color:var(--muted);padding:4px 2px;line-height:1.5}
-.tl-item{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--muted)}
+.tl-item{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--muted);user-select:none;-webkit-user-select:none;touch-action:manipulation}
 .tl-item:hover{background:var(--hover);color:var(--fg)}
-.tl-item.sel{background:var(--hover);color:var(--fg)}
-.tl-item input[type=checkbox]{flex:0 0 auto;margin:0}
+.tl-item.sel{background:var(--fg);color:var(--bg)}
+.tl-item.tl-base{border-top:1px dashed var(--line);margin-top:4px;padding-top:7px}
 .tl-time{flex:0 0 auto}
 .tl-meta{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
@@ -180,6 +184,16 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
 
   <div class="layout">
     <aside id="sidebar" class="sidebar">
+      <div class="nav-tools">
+        <button id="ntNew" class="ntbtn" title="新建同级笔记"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.81 22H6C4.89 22 4 21.11 4 20V4C4 2.9 4.89 2 6 2H14L20 8V13.09C19.67 13.04 19.34 13 19 13S18.33 13.04 18 13.09V9H13V4H6V20H13.09C13.21 20.72 13.46 21.39 13.81 22M23 18H20V15H18V18H15V20H18V23H20V20H23V18Z"/></svg></button>
+        <button id="ntChild" class="ntbtn" title="新建子笔记"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19,15L13,21L11.58,19.58L15.17,16H4V4H6V14H15.17L11.58,10.42L13,9L19,15Z"/></svg></button>
+        <button id="ntRename" class="ntbtn" title="重命名"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14.06,9L15,9.94L5.92,19H5V18.08L14.06,9M17.66,3C17.41,3 17.15,3.1 16.96,3.29L15.13,5.12L18.88,8.87L20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18.17,3.09 17.92,3 17.66,3M14.06,6.19L3,17.25V21H6.75L17.81,9.94L14.06,6.19Z"/></svg></button>
+        <button id="ntDelete" class="ntbtn" title="删除笔记（子笔记上移保留）"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19M8,9H16V19H8V9M15.5,4L14.5,3H9.5L8.5,4H5V6H19V4H15.5Z"/></svg></button>
+        <button id="ntUp" class="ntbtn" title="上移"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13,20H11V8L5.5,13.5L4.08,12.08L12,4.16L19.92,12.08L18.5,13.5L13,8V20Z"/></svg></button>
+        <button id="ntDown" class="ntbtn" title="下移"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11,4H13V16L18.5,10.5L19.92,11.92L12,19.84L4.08,11.92L5.5,10.5L11,16V4Z"/></svg></button>
+        <button id="ntIndent" class="ntbtn" title="缩进（成为上一节点的子级）"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11,13H21V11H11M11,9H21V7H11M3,3V5H21V3M11,17H21V15H11M3,8V16L7,12M3,21H21V19H3V21Z"/></svg></button>
+        <button id="ntOutdent" class="ntbtn" title="取消缩进"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11,13H21V11H11M11,9H21V7H11M3,3V5H21V3M3,21H21V19H3M3,12L7,16V8M11,17H21V15H11V17Z"/></svg></button>
+      </div>
       <nav id="nav"></nav>
       <div class="timeline">
         <div class="tl-head"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.5,8H12V13L16.28,15.54L17,14.33L13.5,12.25V8M13,3A9,9 0 0,0 4,12H1L4.96,16.03L9,12H6A7,7 0 0,1 13,5A7,7 0 0,1 20,12A7,7 0 0,1 13,19C11.07,19 9.32,18.21 8.06,16.94L6.64,18.36C8.27,20 10.5,21 13,21A9,9 0 0,0 22,12A9,9 0 0,0 13,3"/></svg> 本地版本 <span id="tlCount"></span></div>
@@ -396,6 +410,87 @@ function closeSidebar(){ $('sidebar').classList.remove('open'); $('scrim').class
 $('menu').onclick=()=>{ $('sidebar').classList.toggle('open'); $('scrim').classList.toggle('show'); };
 $('scrim').onclick=closeSidebar;
 
+/* nav editing (add / rename / delete / move / indent) */
+function findNode(nodes, id, parent){
+  for(let i=0;i<nodes.length;i++){
+    const n=nodes[i];
+    if(n.id===id) return {node:n, list:nodes, index:i, parent};
+    if(n.children){ const r=findNode(n.children, id, n); if(r) return r; }
+  }
+  return null;
+}
+function newId(){ return 'n'+Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
+function afterStructureChange(){ markDirty(true); renderNav(); renderTimeline(); updateStats(); }
+$('ntNew').onclick=()=>{
+  const title=prompt('新笔记标题：','新笔记'); if(title===null) return;
+  const id=newId(), node={title:title.trim()||'新笔记', id};
+  const ref=currentId?findNode(state.nav,currentId):null;
+  if(ref) ref.list.splice(ref.index+1,0,node); else state.nav.push(node);
+  state.pages[id]='';
+  afterStructureChange();
+  selectNote(id, true);
+  markDirty(true);
+};
+$('ntChild').onclick=()=>{
+  if(!currentId) return;
+  const title=prompt('子笔记标题：','子笔记'); if(title===null) return;
+  const ref=findNode(state.nav,currentId); if(!ref) return;
+  const id=newId(), node={title:title.trim()||'子笔记', id};
+  if(!ref.node.children) ref.node.children=[];
+  ref.node.children.push(node);
+  state.pages[id]='';
+  afterStructureChange();
+  selectNote(id, true);
+  markDirty(true);
+};
+$('ntRename').onclick=()=>{
+  if(!currentId) return;
+  const ref=findNode(state.nav,currentId); if(!ref) return;
+  const title=prompt('重命名：',ref.node.title); if(title===null) return;
+  ref.node.title=title.trim()||ref.node.title;
+  afterStructureChange();
+};
+$('ntDelete').onclick=()=>{
+  if(!currentId) return;
+  const ref=findNode(state.nav,currentId); if(!ref) return;
+  if(!confirm('删除「'+ref.node.title+'」？（子笔记会上移保留）')) return;
+  const kids=ref.node.children||[];
+  ref.list.splice(ref.index,1,...kids);
+  delete state.pages[ref.node.id];
+  afterStructureChange();
+  const first=state.nav[0]&&state.nav[0].id;
+  if(first){ selectNote(first,true); markDirty(true); } else { currentId=null; renderNav(); renderTimeline(); markDirty(true); }
+};
+function moveNode(dir){
+  if(!currentId) return;
+  const ref=findNode(state.nav,currentId); if(!ref) return;
+  const ni=ref.index+dir;
+  if(ni<0||ni>=ref.list.length) return;
+  const [n]=ref.list.splice(ref.index,1);
+  ref.list.splice(ni,0,n);
+  afterStructureChange();
+}
+$('ntUp').onclick=()=>moveNode(-1);
+$('ntDown').onclick=()=>moveNode(1);
+$('ntIndent').onclick=()=>{
+  if(!currentId) return;
+  const ref=findNode(state.nav,currentId); if(!ref||ref.index===0) return;
+  const prev=ref.list[ref.index-1];
+  const [n]=ref.list.splice(ref.index,1);
+  if(!prev.children) prev.children=[];
+  prev.children.push(n);
+  afterStructureChange();
+};
+$('ntOutdent').onclick=()=>{
+  if(!currentId) return;
+  const ref=findNode(state.nav,currentId); if(!ref||!ref.parent) return;
+  const parentRef=findNode(state.nav, ref.parent.id);
+  if(!parentRef) return;
+  const [n]=ref.list.splice(ref.index,1);
+  parentRef.list.splice(parentRef.index+1,0,n);
+  afterStructureChange();
+};
+
 /* draft cache */
 function draftKey(id){ return 'en-draft:'+id; }
 function loadDraft(id){ try{ const d=JSON.parse(localStorage.getItem(draftKey(id))||'null'); return d&&typeof d.c==='string'?d:null; }catch(e){ return null; } }
@@ -423,7 +518,7 @@ function updateAutosaveInfo(msg){
   const el=$('autosaveInfo');
   if(msg){ el.textContent=msg; return; }
   const d=loadDraft(currentId);
-  el.textContent = d ? ('草稿缓存于 '+new Date(d.t).toLocaleTimeString()) : (autosaveCfg.mode==='blur'?'失焦缓存':'定时 '+autosaveCfg.seconds+'s');
+  el.textContent = d ? ('草稿缓存于 '+fmtClock(d.t)) : (autosaveCfg.mode==='blur'?'失焦缓存':'定时 '+autosaveCfg.seconds+'s');
 }
 
 /* local versions (timeline) */
@@ -435,12 +530,16 @@ async function vClear(){ try{ const db=await vOpen(); await new Promise((res,rej
 async function vDelete(ids){ if(!ids.length) return; try{ const db=await vOpen(); await new Promise((res,rej)=>{ const tx=db.transaction(VSTORE,'readwrite'); const os=tx.objectStore(VSTORE); ids.forEach(i=>os.delete(i)); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }catch(e){} }
 
 let versions=[], selectedVersions=new Set();
+const REASON_LABEL={draft:'定时缓存', blur:'焦点改变', background:'切入后台', switch:'切换笔记', sync:'同步'};
+function reasonLabel(r){ return REASON_LABEL[r]||r||''; }
+function fmtClock(ts){ return new Date(ts).toLocaleTimeString('zh-CN',{hour12:false}); }
 async function loadVersions(){ versions=(await vAll()).sort((a,b)=>b.id-a.id); renderTimeline(); }
 async function snapshot(reason){
   if(!state || !currentId) return;
   const content=$('ta').value;
   const latest=versions.find(v=>v.noteId===currentId);
-  if(latest && latest.content===content) return;
+  const baseline = latest ? latest.content : ((cloudState && cloudState.pages && cloudState.pages[currentId]) || '');
+  if(content===baseline) return;
   const now=Date.now();
   const id=await vAdd({ts:now, noteId:currentId, content, reason});
   versions.unshift({id, ts:now, noteId:currentId, content, reason});
@@ -451,25 +550,35 @@ function renderTimeline(){
   const el=$('timeline'); if(!el) return;
   el.innerHTML='';
   $('tlCount').textContent = versions.length?('('+versions.length+')'):'';
-  if(!versions.length){ el.innerHTML='<div class="tl-empty">暂无本地版本（编辑/缓存时自动记录；推送成功后清空）</div>'; return; }
+  if(!versions.length){ el.innerHTML='<div class="tl-empty">暂无本地版本（有改动时自动记录；推送成功后清空）</div>'; return; }
   for(const v of versions){
-    const row=document.createElement('div'); row.className='tl-item'+(selectedVersions.has(v.id)?' sel':'');
-    const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=selectedVersions.has(v.id);
-    cb.onclick=(e)=>{ e.stopPropagation(); toggleSelect(v.id, cb.checked); };
-    const t=document.createElement('span'); t.className='tl-time'; t.textContent=new Date(v.ts).toLocaleTimeString();
-    const m=document.createElement('span'); m.className='tl-meta'; m.textContent=(v.noteId||'')+' · '+(v.reason||'');
-    row.appendChild(cb); row.appendChild(t); row.appendChild(m);
-    row.onclick=()=>showVersionDiff(v.id);
+    const row=document.createElement('div');
+    row.className='tl-item'+(selectedVersions.has(v.id)?' sel':'');
+    row.dataset.id=v.id;
+    const t=document.createElement('span'); t.className='tl-time'; t.textContent=fmtClock(v.ts);
+    const m=document.createElement('span'); m.className='tl-meta'; m.textContent=(v.noteId||'')+' · '+reasonLabel(v.reason);
+    row.appendChild(t); row.appendChild(m);
+    attachLongPress(row, v.id);
     el.appendChild(row);
   }
   if(currentId){
-    const baseRow=document.createElement('div'); baseRow.className='tl-item';
+    const baseRow=document.createElement('div'); baseRow.className='tl-item tl-base';
     const bt=document.createElement('span'); bt.className='tl-time'; bt.textContent='基';
     const bm=document.createElement('span'); bm.className='tl-meta'; bm.textContent=baseLabelFor(currentId)+' · 点击对比当前';
     baseRow.appendChild(bt); baseRow.appendChild(bm);
     baseRow.onclick=()=>openDiff(baseContentFor(currentId), $('ta').value, '基（'+baseLabelFor(currentId)+'）', '当前编辑器');
     el.appendChild(baseRow);
   }
+}
+function attachLongPress(row, id){
+  let timer=null, longPressed=false;
+  const start=()=>{ longPressed=false; timer=setTimeout(()=>{ longPressed=true; toggleSelect(id, !selectedVersions.has(id)); }, 500); };
+  const cancel=()=>{ if(timer){ clearTimeout(timer); timer=null; } };
+  row.addEventListener('pointerdown', start);
+  row.addEventListener('pointerup', ()=>{ cancel(); if(!longPressed) showVersionDiff(id); });
+  row.addEventListener('pointerleave', cancel);
+  row.addEventListener('pointercancel', cancel);
+  row.addEventListener('contextmenu', e=>e.preventDefault());
 }
 function toggleSelect(id,on){ if(on) selectedVersions.add(id); else selectedVersions.delete(id); renderTimeline(); if(selectedVersions.size===2) showSelectedDiff(); }
 function baseContentFor(noteId){
@@ -482,12 +591,12 @@ function baseLabelFor(noteId){
 }
 function showVersionDiff(id){
   const cur=versions.find(v=>v.id===id); if(!cur) return;
-  openDiff(baseContentFor(cur.noteId), cur.content, '基（'+baseLabelFor(cur.noteId)+'）', new Date(cur.ts).toLocaleTimeString());
+  openDiff(baseContentFor(cur.noteId), cur.content, '基（'+baseLabelFor(cur.noteId)+'）', fmtClock(cur.ts));
 }
 function showSelectedDiff(){
   const arr=[...selectedVersions].map(id=>versions.find(v=>v.id===id)).filter(Boolean).sort((a,b)=>a.id-b.id);
   if(arr.length!==2) return;
-  openDiff(arr[0].content, arr[1].content, new Date(arr[0].ts).toLocaleTimeString(), new Date(arr[1].ts).toLocaleTimeString());
+  openDiff(arr[0].content, arr[1].content, fmtClock(arr[0].ts), fmtClock(arr[1].ts));
 }
 function diffLines(a,b){
   const A=String(a).split('\n'), B=String(b).split('\n'), n=A.length, m=B.length;
