@@ -72,9 +72,9 @@ export function parseNote(text){
 }
 
 /* paths */
-export function notePath(id, ancestors){ return params.notesDir+'/'+((ancestors&&ancestors.length)?ancestors.join('/')+'/':'')+id; }
-export function idFromPath(p){ const s=p.split('/'); return s[s.length-1]; }
-export function ancestorsFromPath(p){ const s=p.split('/'); return s.slice(1, s.length-1); }
+export function notePath(id, ancestors){ return params.notesDir+'/'+((ancestors&&ancestors.length)?ancestors.join('/')+'/':'')+id+'/note'; }
+export function idFromPath(p){ const s=p.split('/'); return s[s.length-2]; }
+export function ancestorsFromPath(p){ const s=p.split('/'); return s.slice(1, s.length-2); }
 
 /* remote */
 export async function remoteNotes(token){
@@ -85,7 +85,7 @@ export async function remoteNotes(token){
   const j=await r.json();
   const pre=params.notesDir+'/';
   return (j.tree||[])
-    .filter(e=>e.type==='blob' && e.path.startsWith(pre) && !e.path.slice(pre.length).split('/').some(s=>s.startsWith('.')))
+    .filter(e=>e.type==='blob' && e.path.startsWith(pre) && e.path.endsWith('/note'))
     .map(e=>({path:e.path, sha:e.sha, id:idFromPath(e.path)}));
 }
 export async function fetchNote(path){
