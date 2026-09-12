@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "notes": [
+    "notes/crypto/argon2/note",
+    "notes/crypto/note",
+    "notes/home/note",
+    "notes/test/note"
+  ]
+}
