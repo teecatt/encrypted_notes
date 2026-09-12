@@ -182,18 +182,30 @@ function open(){ return new Promise((res,rej)=>{ const r=indexedDB.open(DB,1); r
 export async function cacheGet(k){ try{ const db=await open(); return await new Promise((res,rej)=>{ const q=db.transaction(ST,'readonly').objectStore(ST).get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }catch(e){ return null; } }
 export async function cachePut(k,v){ try{ const db=await open(); await new Promise((res,rej)=>{ const q=db.transaction(ST,'readwrite').objectStore(ST).put(v,k); q.onsuccess=()=>res(); q.onerror=()=>rej(q.error); }); }catch(e){} }
 export async function cacheDel(k){ try{ const db=await open(); await new Promise((res,rej)=>{ const q=db.transaction(ST,'readwrite').objectStore(ST).delete(k); q.onsuccess=()=>res(); q.onerror=()=>rej(q.error); }); }catch(e){} }
+/* wipe every decrypted artifact: cached notes/meta/cloud/nameSeg + local timeline DB.
+   Does NOT touch the GitHub token or theme. */
+export async function clearDocs(){
+  try{ const db=await open(); await new Promise((res,rej)=>{ const tx=db.transaction(ST,'readwrite'); tx.objectStore(ST).clear(); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }catch(e){}
+  await new Promise(res=>{ try{ const r=indexedDB.deleteDatabase('en-versions'); r.onsuccess=r.onerror=r.onblocked=()=>res(); }catch(e){ res(); } });
+}
 
 /* tree helpers. notes: { id: {id,title,content,order,ancestors} } */
 export function buildNav(notes){
   const byId=notes, childrenOf={};
   Object.values(notes).forEach(n=>{
-    const parent=(n.ancestors&&n.ancestors.length)?n.ancestors[n.ancestors.length-1]:'';
+    let parent=(n.ancestors&&n.ancestors.length)?n.ancestors[n.ancestors.length-1]:'';
+    if(parent && !byId[parent]) parent=''; // orphan -> root
     (childrenOf[parent]=childrenOf[parent]||[]).push(n.id);
   });
+  const seen=new Set();
   const mk=pid=>(childrenOf[pid]||[])
+    .filter(id=>byId[id] && id!==pid && !seen.has(id))
     .sort((a,b)=>(byId[a].order||0)-(byId[b].order||0))
-    .map(id=>{ const n=byId[id]; const node={title:n.title, id}; const kids=mk(id); if(kids.length) node.children=kids; return node; });
-  return mk('');
+    .map(id=>{ seen.add(id); const node={title:byId[id].title, id}; const kids=mk(id); if(kids.length) node.children=kids; return node; });
+  const roots=mk('');
+  // cycle-safe: attach anything unreachable (e.g. garbage/cyclic ids) as flat roots
+  Object.keys(byId).forEach(id=>{ if(!seen.has(id)){ seen.add(id); roots.push({title:byId[id].title, id}); } });
+  return roots;
 }
 export function flattenNotes(notes){
   return Object.values(notes).map(n=>({id:n.id,title:n.title,content:n.content||'',order:n.order||0,ancestors:(n.ancestors||[]).slice()}));
