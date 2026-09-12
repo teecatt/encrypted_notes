@@ -288,11 +288,11 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script type="module">
-import * as S from './store.js?v=3';
+import * as S from './store.js?v=4';
 
 const $ = id => document.getElementById(id);
 let state=null, cloudNotes={}, meta={}, nameSeg={}, token='', currentId=null, dirty=false;
-const SCHEMA=2;
+const SCHEMA=3;
 
 const escapeHtml=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
@@ -676,15 +676,12 @@ async function save(){
      work on a copy so cancelling the save dialog does not mutate nameSeg. */
   const nextSeg=Object.assign({},nameSeg);
   for(const id in local){
-    const l=local[id];
-    if(nextSeg[id] && cloudNotes[id] && cloudNotes[id].title===l.title) continue;
-    nextSeg[id]=await S.encryptName(id, l.title);
+    const l=local[id], c=cloudNotes[id];
+    if(nextSeg[id] && c && c.title===l.title && JSON.stringify(c.ancestors||[])===JSON.stringify(l.ancestors||[])) continue;
+    nextSeg[id]=await S.encryptName(id, l.title, l.ancestors);
   }
   const paths={};
-  for(const id in local){
-    const l=local[id];
-    paths[id]=S.pathFromSegments(l.ancestors.map(a=>nextSeg[a]).concat([nextSeg[id]]));
-  }
+  for(const id in local){ paths[id]=S.pathFromSegment(nextSeg[id]); }
   const changed=[], removed=[];
   for(const id in local){
     const l=local[id], c=cloudNotes[id], m=meta[id];
@@ -746,12 +743,10 @@ async function sync(){
     const newCloud={};
     let pulled=0;
     for(const e of remote){
-      const segs=S.segmentsFromPath(e.path);
-      const chain=[];
-      for(const seg of segs){ const d=await S.decryptName(seg); if(!d){ chain.length=0; break; } chain.push(d); }
-      if(!chain.length) continue;
-      const self=chain[chain.length-1];
-      const ancestors=chain.slice(0,-1).map(c=>c.id);
+      const seg=S.segFromPath(e.path);
+      const self=await S.decryptName(seg);
+      if(!self) continue;
+      const ancestors=(self.ancestors||[]).slice();
       const m=meta[self.id];
       let rp;
       if(m && m.sha===e.sha && m.path===e.path && cloudNotes[self.id]){
@@ -762,7 +757,7 @@ async function sync(){
         if(!p) continue;
         rp={id:self.id,title:self.title,content:p.content,order:p.order,ancestors};
         meta[self.id]={sha:e.sha,path:e.path};
-        nameSeg[self.id]=segs[segs.length-1];
+        nameSeg[self.id]=seg;
       }
       newCloud[self.id]=rp;
       const l=local[self.id], c=cloudNotes[self.id];
@@ -815,17 +810,15 @@ async function fullLoad(){
   const remote=await S.remoteNotes(token, true);
   const notes={}; nameSeg={};
   for(const e of remote){
-    const segs=S.segmentsFromPath(e.path);
-    const chain=[];
-    for(const seg of segs){ const d=await S.decryptName(seg); if(!d){ chain.length=0; break; } chain.push(d); }
-    if(!chain.length) continue;
-    const self=chain[chain.length-1];
-    const ancestors=chain.slice(0,-1).map(c=>c.id);
+    const seg=S.segFromPath(e.path);
+    const self=await S.decryptName(seg);
+    if(!self) continue;
+    const ancestors=(self.ancestors||[]).slice();
     try{
       const p=S.parseNote(await S.decryptText((await S.fetchNote(e.path)).trim()));
       if(!p) continue;
       notes[self.id]={id:self.id,title:self.title,content:p.content,order:p.order,ancestors};
-      nameSeg[self.id]=segs[segs.length-1];
+      nameSeg[self.id]=seg;
       meta[self.id]={sha:/^[0-9a-f]{40}$/.test(e.sha||'')?e.sha:null, path:e.path};
     }catch(err){ console.warn('跳过',e.path,err); }
   }
