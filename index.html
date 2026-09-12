@@ -200,7 +200,7 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
 </div>
 
 <script type="module">
-import * as S from './store.js?v=2';
+import * as S from './store.js?v=3';
 
 const $ = id => document.getElementById(id);
 let state=null, currentId=null, token='', garbageMode=false, garbageIds=new Set();
@@ -353,7 +353,13 @@ $('unlockForm').onsubmit=async(e)=>{
 };
 
 /* lock / edit / hashchange */
-$('btnLock').onclick=async()=>{ clearTimeout(garbageTimer); await idbDel(IDB_KEY); location.reload(); };
+$('btnLock').onclick=async()=>{
+  clearTimeout(garbageTimer);
+  await S.clearDocs();
+  await idbDel(IDB_KEY);
+  try{ Object.keys(localStorage).filter(k=>k.indexOf('en-draft')===0).forEach(k=>localStorage.removeItem(k)); }catch(e){}
+  location.reload();
+};
 $('btnEdit').onclick=()=>{ if(garbageMode){ showToast('解密异常，无法编辑'); return; } location.href='edit.html'+(currentId?'#'+encodeURIComponent(currentId):''); };
 $('menu').onclick=()=>{ $('sidebar').classList.toggle('open'); $('scrim').classList.toggle('show'); };
 $('scrim').onclick=()=>{ $('sidebar').classList.remove('open'); $('scrim').classList.remove('show'); };
