@@ -127,6 +127,25 @@ html.dark .pw-input{background:#0d0d0d}
 #toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(12px);z-index:95;max-width:calc(100vw - 32px);padding:10px 18px;border-radius:999px;background:rgba(20,20,20,.92);color:#fff;font-size:13px;opacity:0;pointer-events:none;transition:opacity .22s,transform .22s}
 html.dark #toast{background:rgba(245,245,245,.94);color:#000}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* timeline */
+.timeline{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
+.tl-head{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px}
+.tl-head svg{width:14px;height:14px}
+.tl-empty{font-size:12px;color:var(--muted);padding:4px 2px;line-height:1.5}
+.tl-item{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--muted)}
+.tl-item:hover{background:var(--hover);color:var(--fg)}
+.tl-item.sel{background:var(--hover);color:var(--fg)}
+.tl-item input[type=checkbox]{flex:0 0 auto;margin:0}
+.tl-time{flex:0 0 auto}
+.tl-meta{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* diff */
+.diff-body{overflow:auto;flex:1 1 auto;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.65;padding:6px 0;min-height:120px}
+.diff-line{white-space:pre-wrap;word-break:break-all;padding:0 10px}
+.diff-add{background:rgba(34,197,94,.16)}
+.diff-del{background:rgba(229,72,77,.16)}
+.diff-sign{display:inline-block;width:1.1em;color:var(--muted);user-select:none}
 </style>
 </head>
 <body>
@@ -153,13 +172,20 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
     <span class="spacer"></span>
     <input id="descInline" class="desc-inline hidden" placeholder="提交描述（可选）" title="提交描述（可选）">
     <button id="btnSave" class="btn btn-primary" title="保存到 dev（Ctrl/Cmd+S）"><svg viewBox="0 0 24 24" fill="currentColor" style="width:17px;height:17px"><path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z"/></svg><span>保存</span></button>
+    <button id="btnSync" class="icon-btn" title="从远端同步并解密" aria-label="同步"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12,18A6,6 0 0,1 6,12C6,11 6.25,10.03 6.7,9.2L5.24,7.74C4.46,8.97 4,10.43 4,12A8,8 0 0,0 12,20V23L16,19L12,15M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12C18,13 17.75,13.97 17.3,14.8L18.76,16.26C19.54,15.03 20,13.57 20,12A8,8 0 0,0 12,4Z"/></svg></button>
     <button id="btnSettings" class="icon-btn" title="设置" aria-label="设置"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></svg></button>
     <button id="theme-toggle" class="icon-btn" title="主题" aria-label="主题"><svg class="i-sun" viewBox="0 -960 960 960" fill="currentColor"><path d="M480-360q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35Zm0 80q-83 0-141.5-58.5T280-480q0-83 58.5-141.5T480-680q83 0 141.5 58.5T680-480q0 83-58.5 141.5T480-280ZM80-440q-17 0-28.5-11.5T40-480q0-17 11.5-28.5T80-520h80q17 0 28.5 11.5T200-480q0 17-11.5 28.5T160-440H80Zm720 0q-17 0-28.5-11.5T760-480q0-17 11.5-28.5T800-520h80q17 0 28.5 11.5T920-480q0 17-11.5 28.5T880-440h-80ZM480-760q-17 0-28.5-11.5T440-800v-80q0-17 11.5-28.5T480-920q17 0 28.5 11.5T520-880v80q0 17-11.5 28.5T480-760Zm0 720q-17 0-28.5-11.5T440-80v-80q0-17 11.5-28.5T480-200q17 0 28.5 11.5T520-160v80q0 17-11.5 28.5T480-40ZM226-678l-43-42q-12-11-11.5-28t11.5-29q12-12 29-12t28 12l42 43q11 12 11 28t-11 28q-11 12-27.5 11.5T226-678Zm494 495-42-43q-11-12-11-28.5t11-27.5q11-12 27.5-11.5T734-282l43 42q12 11 11.5 28T777-183q-12 12-29 12t-28-12Zm-42-495q-12-11-11.5-27.5T678-734l42-43q11-12 28-11.5t29 11.5q12 12 12 29t-12 28l-43 42q-12 11-28 11t-28-11ZM183-183q-12-12-12-29t12-28l43-42q12-11 28.5-11t27.5 11q12 11 11.5 27.5T282-226l-42 43q-11 12-28 11.5T183-183Zm297-297Z"/></svg><svg class="i-moon" viewBox="0 -960 960 960" fill="currentColor"><path d="M480-120q-151 0-255.5-104.5T120-480q0-138 90-239.5T440-838q13-2 23 3.5t16 14.5q6 9 6.5 21t-7.5 23q-17 26-25.5 55t-8.5 61q0 90 63 153t153 63q31 0 61.5-9t54.5-25q11-7 22.5-6.5T819-479q10 5 15.5 15t3.5 24q-14 138-117.5 229T480-120Zm0-80q88 0 158-48.5T740-375q-20 5-40 8t-40 3q-123 0-209.5-86.5T364-660q0-20 3-40t8-40q-78 32-126.5 102T200-480q0 116 82 198t198 82Zm-10-270Z"/></svg></button>
     <a class="icon-btn" href="https://down2.top/encrypted_params/about.html" target="_blank" rel="noopener" title="关于加密技术细节" aria-label="帮助"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10,19H13V22H10V19M12,2C17.35,2.22 19.68,7.62 16.5,11.67C15.67,12.67 14.33,13.33 13.67,14.17C13,15 13,16 13,17H10C10,15.33 10,13.92 10.67,12.92C11.33,11.92 12.67,11.33 13.5,10.67C15.92,8.43 15.32,5.26 12,5A3,3 0 0,0 9,8H6A6,6 0 0,1 12,2Z"/></svg></a>
   </header>
 
   <div class="layout">
-    <aside id="sidebar" class="sidebar"><nav id="nav"></nav></aside>
+    <aside id="sidebar" class="sidebar">
+      <nav id="nav"></nav>
+      <div class="timeline">
+        <div class="tl-head"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.5,8H12V13L16.28,15.54L17,14.33L13.5,12.25V8M13,3A9,9 0 0,0 4,12H1L4.96,16.03L9,12H6A7,7 0 0,1 13,5A7,7 0 0,1 20,12A7,7 0 0,1 13,19C11.07,19 9.32,18.21 8.06,16.94L6.64,18.36C8.27,20 10.5,21 13,21A9,9 0 0,0 22,12A9,9 0 0,0 13,3"/></svg> 本地版本 <span id="tlCount"></span></div>
+        <div id="timeline"></div>
+      </div>
+    </aside>
     <div id="scrim" class="scrim"></div>
     <div class="main">
       <div class="toolbar" id="toolbar">
@@ -234,6 +260,15 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
       <button type="submit" class="btn btn-primary" style="flex:1">确认保存</button>
     </div>
   </form>
+</div>
+
+<!-- Diff -->
+<div id="diffModal" class="hidden overlay">
+  <div class="card" style="max-width:860px;width:100%;max-height:82vh;display:flex;flex-direction:column">
+    <h2>版本对比 <span id="diffLabels" style="font-size:12px;font-weight:400;color:var(--muted);margin-left:6px"></span></h2>
+    <div id="diffBody" class="diff-body"></div>
+    <div style="margin-top:12px;display:flex;justify-content:flex-end"><button id="diffClose" class="btn">关闭</button></div>
+  </div>
 </div>
 
 <div id="toast" role="status" aria-live="polite"></div>
@@ -375,7 +410,7 @@ function cancelAutosave(){ if(autosaveTimer){ clearTimeout(autosaveTimer); autos
 function scheduleAutosave(){
   if(autosaveCfg.mode==='blur') return;
   cancelAutosave();
-  autosaveTimer=setTimeout(()=>{ autosaveTimer=null; saveDraft(); }, autosaveCfg.seconds*1000);
+  autosaveTimer=setTimeout(()=>{ autosaveTimer=null; saveDraft(); snapshot('draft'); }, autosaveCfg.seconds*1000);
 }
 function saveDraft(){
   if(!state || !currentId) return;
@@ -389,6 +424,87 @@ function updateAutosaveInfo(msg){
   if(msg){ el.textContent=msg; return; }
   const d=loadDraft(currentId);
   el.textContent = d ? ('草稿缓存于 '+new Date(d.t).toLocaleTimeString()) : (autosaveCfg.mode==='blur'?'失焦缓存':'定时 '+autosaveCfg.seconds+'s');
+}
+
+/* local versions (timeline) */
+const VDB='en-versions', VSTORE='v';
+function vOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open(VDB,1); r.onupgradeneeded=()=>{ r.result.createObjectStore(VSTORE,{keyPath:'id',autoIncrement:true}); }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function vAdd(rec){ const db=await vOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(VSTORE,'readwrite').objectStore(VSTORE).add(rec); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
+async function vAll(){ try{ const db=await vOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(VSTORE,'readonly').objectStore(VSTORE).getAll(); q.onsuccess=()=>res(q.result||[]); q.onerror=()=>rej(q.error); }); }catch(e){ return []; } }
+async function vClear(){ try{ const db=await vOpen(); await new Promise((res,rej)=>{ const tx=db.transaction(VSTORE,'readwrite'); tx.objectStore(VSTORE).clear(); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }catch(e){} }
+async function vDelete(ids){ if(!ids.length) return; try{ const db=await vOpen(); await new Promise((res,rej)=>{ const tx=db.transaction(VSTORE,'readwrite'); const os=tx.objectStore(VSTORE); ids.forEach(i=>os.delete(i)); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }catch(e){} }
+
+let versions=[], selectedVersions=new Set();
+async function loadVersions(){ versions=(await vAll()).sort((a,b)=>b.id-a.id); renderTimeline(); }
+async function snapshot(reason){
+  if(!state || !currentId) return;
+  const content=$('ta').value;
+  const latest=versions.find(v=>v.noteId===currentId);
+  if(latest && latest.content===content) return;
+  const now=Date.now();
+  const id=await vAdd({ts:now, noteId:currentId, content, reason});
+  versions.unshift({id, ts:now, noteId:currentId, content, reason});
+  while(versions.length>50){ const old=versions.pop(); vDelete([old.id]); }
+  renderTimeline();
+}
+function renderTimeline(){
+  const el=$('timeline'); if(!el) return;
+  el.innerHTML='';
+  $('tlCount').textContent = versions.length?('('+versions.length+')'):'';
+  if(!versions.length){ el.innerHTML='<div class="tl-empty">暂无本地版本（编辑/缓存时自动记录；推送成功后清空）</div>'; return; }
+  for(const v of versions){
+    const row=document.createElement('div'); row.className='tl-item'+(selectedVersions.has(v.id)?' sel':'');
+    const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=selectedVersions.has(v.id);
+    cb.onclick=(e)=>{ e.stopPropagation(); toggleSelect(v.id, cb.checked); };
+    const t=document.createElement('span'); t.className='tl-time'; t.textContent=new Date(v.ts).toLocaleTimeString();
+    const m=document.createElement('span'); m.className='tl-meta'; m.textContent=(v.noteId||'')+' · '+(v.reason||'');
+    row.appendChild(cb); row.appendChild(t); row.appendChild(m);
+    row.onclick=()=>showVersionDiff(v.id);
+    el.appendChild(row);
+  }
+}
+function toggleSelect(id,on){ if(on) selectedVersions.add(id); else selectedVersions.delete(id); renderTimeline(); if(selectedVersions.size===2) showSelectedDiff(); }
+function showVersionDiff(id){
+  const idx=versions.findIndex(v=>v.id===id); if(idx<0) return;
+  const cur=versions[idx];
+  const prev=versions.slice(idx+1).find(v=>v.noteId===cur.noteId);
+  openDiff(prev?prev.content:'', cur.content, prev?new Date(prev.ts).toLocaleTimeString():'（空）', new Date(cur.ts).toLocaleTimeString());
+}
+function showSelectedDiff(){
+  const arr=[...selectedVersions].map(id=>versions.find(v=>v.id===id)).filter(Boolean).sort((a,b)=>a.id-b.id);
+  if(arr.length!==2) return;
+  openDiff(arr[0].content, arr[1].content, new Date(arr[0].ts).toLocaleTimeString(), new Date(arr[1].ts).toLocaleTimeString());
+}
+function diffLines(a,b){
+  const A=String(a).split('\n'), B=String(b).split('\n'), n=A.length, m=B.length;
+  if(n*m>2000000){ const out=[]; for(let i=0;i<n;i++) out.push({t:'-',s:A[i]}); for(let j=0;j<m;j++) out.push({t:'+',s:B[j]}); return out; }
+  const dp=[]; for(let i=0;i<=n;i++) dp.push(new Int32Array(m+1));
+  for(let i=n-1;i>=0;i--) for(let j=m-1;j>=0;j--) dp[i][j]=A[i]===B[j]?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
+  const out=[]; let i=0,j=0;
+  while(i<n&&j<m){ if(A[i]===B[j]){ out.push({t:' ',s:A[i]}); i++; j++; } else if(dp[i+1][j]>=dp[i][j+1]){ out.push({t:'-',s:A[i]}); i++; } else { out.push({t:'+',s:B[j]}); j++; } }
+  while(i<n) out.push({t:'-',s:A[i++]});
+  while(j<m) out.push({t:'+',s:B[j++]});
+  return out;
+}
+function openDiff(base, latest, baseLabel, latestLabel){
+  $('diffLabels').textContent=baseLabel+' → '+latestLabel;
+  const body=$('diffBody'); body.innerHTML='';
+  for(const l of diffLines(base, latest)){
+    const d=document.createElement('div');
+    d.className='diff-line'+(l.t==='+'?' diff-add':l.t==='-'?' diff-del':'');
+    const sign=document.createElement('span'); sign.className='diff-sign'; sign.textContent=l.t===' '?' ':l.t;
+    d.appendChild(sign); d.appendChild(document.createTextNode(l.s));
+    body.appendChild(d);
+  }
+  $('diffModal').classList.remove('hidden');
+}
+$('diffClose').onclick=()=>$('diffModal').classList.add('hidden');
+function stateEqual(a,b){
+  if(!a||!b) return false;
+  if(JSON.stringify(a.nav)!==JSON.stringify(b.nav)) return false;
+  const ka=Object.keys(a.pages||{}).sort(), kb=Object.keys(b.pages||{}).sort();
+  if(ka.length!==kb.length || ka.some((k,i)=>k!==kb[i])) return false;
+  return ka.every(k=>a.pages[k]===b.pages[k]);
 }
 
 /* render throttle (max 1/s) + preview scroll sync */
@@ -437,13 +553,13 @@ $('ta').addEventListener('input', onInput);
 $('ta').addEventListener('click', syncPreviewFromCursor);
 $('ta').addEventListener('keyup', (e)=>{ if(e.key.length>1||e.key==='Enter'||e.key==='ArrowUp'||e.key==='ArrowDown') syncPreviewFromCursor(); });
 $('ta').addEventListener('scroll', ()=>{ if($('preview').querySelector('[data-line]')) scrollPreviewToLine(topVisibleLine()); });
-$('ta').addEventListener('blur', ()=>{ if(autosaveCfg.mode==='blur') saveDraft(); });
+$('ta').addEventListener('blur', ()=>{ if(autosaveCfg.mode==='blur'){ saveDraft(); snapshot('blur'); } });
 
 /* note selection */
 function selectNote(id, skipConfirm){
   if(!state.pages[id]) id=state.nav[0].id;
   if(!skipConfirm && dirty && currentId && !confirm('当前笔记有未保存的修改，仍要切换吗？')){ renderNav(); return; }
-  if(currentId && dirty) saveDraft();
+  if(currentId && dirty){ saveDraft(); snapshot('switch'); }
   cancelAutosave();
   currentId=id;
   const draft=loadDraft(id), saved=state.pages[id]||'';
@@ -545,6 +661,12 @@ $('saveCancel').onclick=()=>{
 
 async function save(){
   if(!state){ return; }
+  const newState={nav:state.nav, pages:Object.assign({}, state.pages, {[currentId]:$('ta').value})};
+  try{
+    const enc=await fetchNotes();
+    const r=interpretPlaintext(await decryptToText(enc));
+    if(r.state && stateEqual(r.state, newState)){ showToast('没有更改，无需保存'); return; }
+  }catch(e){ console.warn('保存前比对失败', e); }
   let desc='';
   const needDesc=!autosaveCfg.skipDesc;
   const needToken=!token;
@@ -575,6 +697,7 @@ async function save(){
     clearDraft(currentId); cancelAutosave();
     markDirty(false); updateAutosaveInfo();
     if($('descInline')) $('descInline').value='';
+    await vClear(); versions=[]; selectedVersions.clear(); renderTimeline();
     setStatus('已提交到 dev：'+res.commit.sha.slice(0,7),'ok');
     showToast('已保存到 dev');
   }catch(e){
@@ -582,6 +705,31 @@ async function save(){
   }finally{ $('btnSave').disabled=false; }
 }
 $('btnSave').onclick = save;
+
+async function sync(){
+  if(!state){ return; }
+  $('btnSync').disabled=true; setStatus('拉取远端…','warn');
+  try{
+    const enc=await fetchNotes();
+    const r=interpretPlaintext(await decryptToText(enc));
+    if(!r.state) throw new Error('远端解密失败');
+    if(stateEqual(r.state, state)){ setStatus('已是最新','ok'); showToast('远端与本地一致'); return; }
+    const remote=r.state, localNow=$('ta').value, remoteNote=remote.pages[currentId]||'';
+    saveDraft(); await snapshot('sync');
+    state=remote; renderNav();
+    if(localNow!==remoteNote){
+      $('ta').value=localNow; markDirty(true); doRender(); updateStats();
+      openDiff(remoteNote, localNow, '远端(base)', '本地(最新)');
+      setStatus('已拉取远端；本地改动作为最新版本','warn');
+      showToast('远端作为基，本地为最新变更');
+    } else {
+      selectNote(currentId, true);
+      setStatus('已同步远端','ok'); showToast('已同步远端');
+    }
+  }catch(e){ setStatus('✗ '+e.message,'err'); }
+  finally{ $('btnSync').disabled=false; }
+}
+$('btnSync').onclick = sync;
 document.addEventListener('keydown', e=>{ if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){ e.preventDefault(); save(); } });
 
 /* theme */
@@ -619,6 +767,7 @@ function showEditor(){
   $('gate').classList.add('hidden');
   $('app').classList.remove('hidden');
   applySaveUI();
+  loadVersions();
   const id=(location.hash||'').replace(/^#\/?/,'') || state.nav[0].id;
   selectNote(id, true);
 }
