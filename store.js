@@ -77,16 +77,31 @@ export function idFromPath(p){ const s=p.split('/'); return s[s.length-2]; }
 export function ancestorsFromPath(p){ const s=p.split('/'); return s.slice(1, s.length-2); }
 
 /* remote */
-export async function remoteNotes(token){
-  const h={'Accept':'application/vnd.github+json'};
-  if(token) h['Authorization']='Bearer '+token;
-  const r=await fetch(API_BASE+'/git/trees/'+BRANCH+'?recursive=1',{headers:h,cache:'no-store'});
+async function jsdelivrNotes(){
+  const r=await fetch('https://data.jsdelivr.com/v1/packages/gh/'+OWNER+'/'+REPO+'@'+BRANCH+'?structure=flat',{cache:'no-store'});
   if(!r.ok) throw new Error('列出远端失败 '+r.status);
   const j=await r.json();
-  const pre=params.notesDir+'/';
-  return (j.tree||[])
-    .filter(e=>e.type==='blob' && e.path.startsWith(pre) && e.path.endsWith('/note'))
-    .map(e=>({path:e.path, sha:e.sha, id:idFromPath(e.path)}));
+  const pre='/'+params.notesDir+'/';
+  return (j.files||[])
+    .filter(f=>f.name.startsWith(pre) && f.name.endsWith('/note'))
+    .map(f=>({path:f.name.slice(1), sha:f.hash, id:idFromPath(f.name.slice(1))}));
+}
+export async function remoteNotes(token, fallback){
+  try{
+    const h={'Accept':'application/vnd.github+json'};
+    if(token) h['Authorization']='Bearer '+token;
+    const r=await fetch(API_BASE+'/git/trees/'+BRANCH+'?recursive=1',{headers:h,cache:'no-store'});
+    if(!r.ok) throw new Error('github '+r.status);
+    const j=await r.json();
+    const pre=params.notesDir+'/';
+    return (j.tree||[])
+      .filter(e=>e.type==='blob' && e.path.startsWith(pre) && e.path.endsWith('/note'))
+      .map(e=>({path:e.path, sha:e.sha, id:idFromPath(e.path)}));
+  }catch(e){
+    if(!fallback) throw new Error('列出远端失败 '+(e.message||e));
+    console.warn('GitHub API 列表失败，改用 jsDelivr：'+e.message);
+    return await jsdelivrNotes();
+  }
 }
 export async function fetchNote(path){
   const r=await fetch(RAW_BASE+path+'?t='+Date.now(),{cache:'no-store'});
