@@ -321,17 +321,7 @@ async function decryptToText(enc){
   const pt = new Uint8Array(await crypto.subtle.decrypt({name:'AES-CTR', counter:iv, length:128}, aesKey, ct));
   return new TextDecoder('utf-8', {fatal:false}).decode(pt);
 }
-async function measureDecrypt(enc){
-  const t0=performance.now();
-  const text=await decryptToText(enc);
-  let dt=performance.now()-t0;
-  if(dt<0.5){
-    const N=200, s=performance.now();
-    for(let i=0;i<N;i++) await decryptToText(enc);
-    dt=(performance.now()-s)/N;
-  }
-  return {text, dt};
-}
+
 function interpretPlaintext(text){
   if(text.startsWith(params.magic)){
     try{ return {state: JSON.parse(text.slice(params.magic.length)), garbage:null}; }
@@ -589,7 +579,9 @@ window.addEventListener('hashchange',()=>{ if(state){ renderPage((location.hash|
     if(t) token=t;
     aesKey=k; remembered=true;
     const enc=await fetchNotes();
-    const {text, dt}=await measureDecrypt(enc);
+    const a=performance.now();
+    const text=await decryptToText(enc);
+    const dt=performance.now()-a;
     const r=interpretPlaintext(text);
     state=r.state; garbageText=r.garbage;
     setLastDecrypt(dt);
