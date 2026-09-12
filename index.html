@@ -186,33 +186,6 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
   </div>
 </div>
 
-<!-- Editor -->
-<div id="editor" class="hidden">
-  <div class="editor-card">
-    <div class="editor-head">
-      <span class="editor-title">编辑 · <span id="editId"></span></span>
-      <span class="spacer"></span>
-      <button id="btnCancel" class="btn">取消</button>
-      <button id="btnSave" class="btn btn-primary">保存到 dev</button>
-    </div>
-    <textarea id="editArea" spellcheck="false"></textarea>
-    <div id="saveMsg"></div>
-  </div>
-</div>
-
-<!-- Token prompt -->
-<div id="tokenModal" class="hidden overlay">
-  <form id="tokenForm" class="card">
-    <h2><svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px"><path d="M7,14A2,2 0 0,1 5,12A2,2 0 0,1 7,10A2,2 0 0,1 9,12A2,2 0 0,1 7,14M12.65,10C11.83,7.67 9.61,6 7,6A6,6 0 0,0 1,12A6,6 0 0,0 7,18C9.61,18 11.83,16.33 12.65,14H17V18H21V14H23V10H12.65Z"/></svg> 需要 GitHub Token</h2>
-    <p class="muted" style="color:var(--muted)">仅用于把加密笔记提交到 <code>encrypted_notes</code> 的 <code>dev</code> 分支，只存内存，不落盘。</p>
-    <input id="tk" type="password" class="pw-input" style="text-align:left" placeholder="github_pat_..." autocomplete="off">
-    <div class="card-actions" style="gap:8px">
-      <button type="button" id="tkCancel" class="btn" style="flex:1">取消</button>
-      <button type="submit" class="btn btn-primary" style="flex:1">确认</button>
-    </div>
-  </form>
-</div>
-
 <!-- Garbage / wrong-key notice -->
 <div id="garbageModal" class="hidden overlay">
   <div class="card">
@@ -244,6 +217,21 @@ function renderMarkdown(src){
   }
   return '<pre class="garbage">'+escapeHtml(src)+'</pre>';
 }
+function underlinePlugin(md){
+  md.inline.ruler.after('emphasis','underline', function(state, silent){
+    const start=state.pos, src=state.src;
+    if(src.charCodeAt(start)!==0x2B || src.charCodeAt(start+1)!==0x2B) return false;
+    const end=src.indexOf('++', start+2);
+    if(end<0 || end===start+2) return false;
+    if(!silent){
+      state.push('u_open','u',1);
+      const t=state.push('text','',0); t.content=src.slice(start+2,end);
+      state.push('u_close','u',-1);
+    }
+    state.pos=end+2;
+    return true;
+  });
+}
 let md=null;
 if(window.markdownit){
   md = window.markdownit({
@@ -255,6 +243,7 @@ if(window.markdownit){
       return '<pre class="hljs"><code>'+escapeHtml(str)+'</code></pre>';
     }
   });
+  md.use(underlinePlugin);
 }
 
 /* ── time formatting (ns / µs / ms / s) ── */
@@ -481,67 +470,10 @@ $('garbageClose').onclick = async () => {
   catch(e){ showToast('复制失败，请手动输入: password'); }
 };
 
-/* ── token prompt ── */
-let tokenResolver=null;
-function askToken(){
-  return new Promise(resolve=>{
-    tokenResolver=resolve;
-    $('tk').value='';
-    $('tokenModal').classList.remove('hidden');
-    setTimeout(()=>$('tk').focus(),50);
-  });
-}
-$('tokenForm').onsubmit=(e)=>{
-  e.preventDefault();
-  const t=$('tk').value.trim();
-  $('tokenModal').classList.add('hidden');
-  if(t){ idbPut(IDB_TOKEN,t).catch(()=>{}); }
-  if(tokenResolver){ tokenResolver(t); tokenResolver=null; }
-};
-$('tkCancel').onclick=()=>{
-  $('tokenModal').classList.add('hidden');
-  if(tokenResolver){ tokenResolver(''); tokenResolver=null; }
-};
-
-/* ── edit / save ── */
+/* ── edit (separate page) ── */
 $('btnEdit').onclick = () => {
   if(!state || !state.pages){ showToast('编辑失败，请检查密钥'); return; }
-  $('editId').textContent=currentId;
-  $('editArea').value=state.pages[currentId]||'';
-  $('saveMsg').textContent='';
-  $('editor').classList.remove('hidden');
-};
-$('btnCancel').onclick = () => $('editor').classList.add('hidden');
-$('btnSave').onclick = async () => {
-  const text=$('editArea').value;
-  if(!token){
-    token = await askToken();
-    if(!token){ return; }
-    updateMode();
-  }
-  state.pages[currentId]=text;
-  $('btnSave').disabled=true;
-  $('saveMsg').textContent='加密并提交中…';
-  $('saveMsg').style.color='#eab308';
-  try{
-    const enc=await encryptNotes(state);
-    const body=JSON.stringify(enc,null,2)+'\n';
-    const auth={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'};
-    const g=await fetch(API_URL+'?ref=dev&t='+Date.now(),{headers:auth});
-    if(!g.ok){ if(g.status===401||g.status===403){ token=''; updateMode(); } throw new Error('读取文件信息失败 '+g.status+'（Token 无效或无权限）'); }
-    const meta=await g.json();
-    const put=await fetch(API_URL,{method:'PUT',headers:{...auth,'Content-Type':'application/json'},
-      body:JSON.stringify({message:'update: '+currentId+' @ '+new Date().toISOString(),content:utf8ToB64(body),branch:'dev',sha:meta.sha})});
-    const res=await put.json();
-    if(!put.ok){ if(put.status===401||put.status===403){ token=''; updateMode(); } throw new Error(res.message||('提交失败 '+put.status)); }
-    $('saveMsg').textContent='已提交到 dev：'+res.commit.sha.slice(0,7);
-    $('saveMsg').style.color='#22c55e';
-    renderPage(currentId);
-    setTimeout(()=>$('editor').classList.add('hidden'),700);
-  }catch(e){
-    $('saveMsg').textContent='✗ '+e.message;
-    $('saveMsg').style.color='#e5484d';
-  }finally{ $('btnSave').disabled=false; }
+  location.href = 'edit.html#'+encodeURIComponent(currentId);
 };
 
 /* ── lock / menu ── */
