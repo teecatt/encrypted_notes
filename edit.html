@@ -291,7 +291,8 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
 import * as S from './store.js';
 
 const $ = id => document.getElementById(id);
-let state=null, cloudNotes={}, meta={}, token='', currentId=null, dirty=false;
+let state=null, cloudNotes={}, meta={}, nameSeg={}, token='', currentId=null, dirty=false;
+const SCHEMA=2;
 
 const escapeHtml=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
@@ -664,10 +665,22 @@ $('saveCancel').onclick=()=>{ $('saveModal').classList.add('hidden'); if(saveRes
 async function save(){
   if(!state){ showToast('尚未解锁或没有数据'); return; }
   const local=stateToNotes();
+  /* reuse each note's existing encrypted-name segment while its title is unchanged;
+     regenerate (new random IV) only on create/rename. pre-order => parents first. */
+  for(const id in local){
+    const l=local[id];
+    if(nameSeg[id] && cloudNotes[id] && cloudNotes[id].title===l.title) continue;
+    nameSeg[id]=await S.encryptName(id, l.title);
+  }
+  const paths={};
+  for(const id in local){
+    const l=local[id];
+    paths[id]=S.pathFromSegments(l.ancestors.map(a=>nameSeg[a]).concat([nameSeg[id]]));
+  }
   const changed=[], removed=[];
   for(const id in local){
     const l=local[id], c=cloudNotes[id], m=meta[id];
-    const same=c && l.title===c.title && l.content===c.content && l.order===c.order && m && m.path===S.notePath(id,l.ancestors);
+    const same=c && l.title===c.title && l.content===c.content && l.order===c.order && m && m.path===paths[id];
     if(!same) changed.push(l);
   }
   for(const id in cloudNotes){ if(!local[id]) removed.push(id); }
@@ -685,7 +698,7 @@ async function save(){
   const message=desc?base+'\n\n'+desc:base;
   try{
     for(const n of changed){
-      const path=S.notePath(n.id,n.ancestors);
+      const path=paths[n.id];
       const b64=await S.encryptText(S.packNote(n.order,n.title,n.content));
       const old=meta[n.id];
       const sha=await S.putNote(path,b64, old&&old.path===path?old.sha:null, token, message);
@@ -694,17 +707,17 @@ async function save(){
     }
     for(const id of removed){
       const m=meta[id];
-      if(m){ try{ await S.deletePath(m.path,m.sha,token,message); }catch(e){} delete meta[id]; }
+      if(m){ try{ await S.deletePath(m.path,m.sha,token,message); }catch(e){} delete meta[id]; delete nameSeg[id]; }
     }
     // maintain structure manifest only when note paths changed
     try{
-      const paths=Object.values(local).map(n=>S.notePath(n.id,n.ancestors)).sort();
+      const allPaths=Object.values(paths).sort();
       const man=await S.readManifest();
       const cur=man&&Array.isArray(man.notes)?man.notes.slice().sort():null;
-      if(!cur || JSON.stringify(cur)!==JSON.stringify(paths)) await S.putManifest({v:1,notes:paths}, token, message);
+      if(!cur || JSON.stringify(cur)!==JSON.stringify(allPaths)) await S.putManifest({v:1,notes:allPaths}, token, message);
     }catch(e){ console.warn('manifest 更新失败',e); }
     cloudNotes=local;
-    await S.cachePut('state',state); await S.cachePut('meta',meta); await S.cachePut('cloud',cloudNotes);
+    await S.cachePut('state',state); await S.cachePut('meta',meta); await S.cachePut('cloud',cloudNotes); await S.cachePut('nameSeg',nameSeg);
     clearDraft(currentId); cancelAutosave(); markDirty(false); updateAutosaveInfo();
     if($('descInline')) $('descInline').value='';
     await vClear(); versions=[]; selectedVersions.clear(); renderTimeline();
@@ -720,37 +733,44 @@ async function sync(){
   try{
     const remote=await S.remoteNotes(token);
     const local=stateToNotes();
-    const remoteIds=new Set(remote.map(e=>e.id));
     const merged=Object.assign({},local);
     const newCloud={};
     let pulled=0;
     for(const e of remote){
-      const m=meta[e.id];
+      const segs=S.segmentsFromPath(e.path);
+      const chain=[];
+      for(const seg of segs){ const d=await S.decryptName(seg); if(!d){ chain.length=0; break; } chain.push(d); }
+      if(!chain.length) continue;
+      const self=chain[chain.length-1];
+      const ancestors=chain.slice(0,-1).map(c=>c.id);
+      const m=meta[self.id];
       let rp;
-      if(m && m.sha===e.sha && m.path===e.path){
-        rp=cloudNotes[e.id]||local[e.id]||{id:e.id,title:'',content:'',order:0,ancestors:S.ancestorsFromPath(e.path)};
+      if(m && m.sha===e.sha && m.path===e.path && cloudNotes[self.id]){
+        rp=cloudNotes[self.id];
       } else {
         const text=(await S.fetchNote(e.path)).trim();
         const p=S.parseNote(await S.decryptText(text));
         if(!p) continue;
-        rp={id:e.id,title:p.title,content:p.content,order:p.order,ancestors:S.ancestorsFromPath(e.path)};
-        meta[e.id]={sha:e.sha,path:e.path};
+        rp={id:self.id,title:self.title,content:p.content,order:p.order,ancestors};
+        meta[self.id]={sha:e.sha,path:e.path};
+        nameSeg[self.id]=segs[segs.length-1];
       }
-      newCloud[e.id]=rp;
-      const l=local[e.id], c=cloudNotes[e.id];
+      newCloud[self.id]=rp;
+      const l=local[self.id], c=cloudNotes[self.id];
       const locallyChanged=l && c && (l.content!==c.content || l.title!==c.title || l.order!==c.order || JSON.stringify(l.ancestors)!==JSON.stringify(c.ancestors));
       if(locallyChanged){
-        merged[e.id]=l;
-        if(e.id===currentId && rp.content!==l.content) openDiff(rp.content,l.content,'远端(base)','本地(最新)');
+        merged[self.id]=l;
+        if(self.id===currentId && rp.content!==l.content) openDiff(rp.content,l.content,'远端(base)','本地(最新)');
       } else {
-        merged[e.id]=rp;
+        merged[self.id]=rp;
       }
       if(JSON.stringify(l)!==JSON.stringify(rp)) pulled++;
     }
+    const remoteIds=new Set(Object.keys(newCloud));
     for(const id in local){ if(!remoteIds.has(id)) merged[id]=local[id]; }
     cloudNotes=newCloud;
     applyNotes(merged);
-    await S.cachePut('state',state); await S.cachePut('meta',meta); await S.cachePut('cloud',cloudNotes);
+    await S.cachePut('state',state); await S.cachePut('meta',meta); await S.cachePut('cloud',cloudNotes); await S.cachePut('nameSeg',nameSeg);
     selectNote(currentId||(state.nav[0]&&state.nav[0].id),true);
     setStatus(pulled?('已拉取 '+pulled+' 处更新'):'已是最新','ok');
     showToast(pulled?'已同步远端':'远端与本地一致');
@@ -784,18 +804,25 @@ function showEditor(){
 }
 async function fullLoad(){
   const remote=await S.remoteNotes(token, true);
-  const notes={};
+  const notes={}; nameSeg={};
   for(const e of remote){
+    const segs=S.segmentsFromPath(e.path);
+    const chain=[];
+    for(const seg of segs){ const d=await S.decryptName(seg); if(!d){ chain.length=0; break; } chain.push(d); }
+    if(!chain.length) continue;
+    const self=chain[chain.length-1];
+    const ancestors=chain.slice(0,-1).map(c=>c.id);
     try{
       const p=S.parseNote(await S.decryptText((await S.fetchNote(e.path)).trim()));
       if(!p) continue;
-      notes[e.id]={id:e.id,title:p.title,content:p.content,order:p.order,ancestors:S.ancestorsFromPath(e.path)};
-      meta[e.id]={sha:/^[0-9a-f]{40}$/.test(e.sha||'')?e.sha:null, path:e.path};
+      notes[self.id]={id:self.id,title:self.title,content:p.content,order:p.order,ancestors};
+      nameSeg[self.id]=segs[segs.length-1];
+      meta[self.id]={sha:/^[0-9a-f]{40}$/.test(e.sha||'')?e.sha:null, path:e.path};
     }catch(err){ console.warn('跳过',e.path,err); }
   }
   cloudNotes=JSON.parse(JSON.stringify(notes));
   applyNotes(notes);
-  await S.cachePut('state',state); await S.cachePut('meta',meta); await S.cachePut('cloud',cloudNotes);
+  await S.cachePut('state',state); await S.cachePut('meta',meta); await S.cachePut('cloud',cloudNotes); await S.cachePut('nameSeg',nameSeg); await S.cachePut('schema',SCHEMA);
 }
 
 $('gateForm').onsubmit=async(e)=>{
@@ -823,11 +850,15 @@ $('gateForm').onsubmit=async(e)=>{
     if(!k){ showGate(); return; }
     S.setKey(k);
     const t=await idbGet(IDB_TOKEN); if(t) token=t;
-    const cmeta=await S.cacheGet('meta'); if(cmeta) meta=cmeta;
-    const ccloud=await S.cacheGet('cloud'); if(ccloud) cloudNotes=ccloud;
-    const cached=await S.cacheGet('state');
-    if(cached && cached.nav){ state=cached; showEditor(); }
-    else { try{ await fullLoad(); }catch(err){ console.warn('拉取失败',err); applyNotes({}); } showEditor(); }
+    const schema=await S.cacheGet('schema');
+    if(schema===SCHEMA){
+      const cmeta=await S.cacheGet('meta'); if(cmeta) meta=cmeta;
+      const ccloud=await S.cacheGet('cloud'); if(ccloud) cloudNotes=ccloud;
+      const cns=await S.cacheGet('nameSeg'); if(cns) nameSeg=cns;
+      const cached=await S.cacheGet('state');
+      if(cached && cached.nav){ state=cached; showEditor(); return; }
+    }
+    try{ await fullLoad(); }catch(err){ console.warn('拉取失败',err); applyNotes({}); } showEditor();
   }catch(e){ console.warn(e); showGate(); }
 })();
 </script>
