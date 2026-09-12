@@ -286,20 +286,25 @@ async function loadAll(){
   const t0=performance.now();
   const man=await S.readManifest();
   let list;
-  if(man && Array.isArray(man.notes)){ list=man.notes.map(p=>({path:p, id:S.idFromPath(p)})); }
-  else { list=await S.remoteNotes(token, true); }
+  if(man && Array.isArray(man.notes)){ list=man.notes.map(p=>({path:p})); }
+  else { list=(await S.remoteNotes(token, true)).map(e=>({path:e.path})); }
   garbageIds=new Set();
   const notes={}; let garbage=null, parsed=0; const orderCounter={};
   for(const e of list){
-    const anc=S.ancestorsFromPath(e.path);
+    const segs=S.segmentsFromPath(e.path);
+    const chain=[];
+    for(const seg of segs){ chain.push((await S.decryptName(seg))||{id:seg,title:seg}); }
+    if(!chain.length) continue;
+    const self=chain[chain.length-1];
+    const anc=chain.slice(0,-1).map(c=>c.id);
     const parent=anc.length?anc[anc.length-1]:'';
     const order=(orderCounter[parent]=(orderCounter[parent]||0)+1)-1;
     try{
       const dec=await S.decryptText((await S.fetchNote(e.path)).trim());
       const p=S.parseNote(dec);
-      if(!p){ if(garbage===null) garbage=dec; garbageIds.add(e.id); notes[e.id]={id:e.id,title:e.id,content:dec,order,ancestors:anc}; continue; }
+      if(!p){ if(garbage===null) garbage=dec; garbageIds.add(self.id); notes[self.id]={id:self.id,title:self.title,content:dec,order,ancestors:anc}; continue; }
       parsed++;
-      notes[e.id]={id:e.id,title:p.title,content:p.content,order:p.order,ancestors:anc};
+      notes[self.id]={id:self.id,title:self.title,content:p.content,order:p.order,ancestors:anc};
     }catch(err){ console.warn('跳过',e.path,err); }
   }
   state={nav:S.buildNav(notes),pages:{}};
