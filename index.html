@@ -356,12 +356,16 @@ window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||
     S.setKey(k);
     const t0=performance.now();
     const cached=await S.cacheGet('state');
-    if(cached){ state=cached; }
-    else { await loadAll(); }
-    $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
-    setLastDecrypt(performance.now()-t0);
-    showToast('已自动解密 · '+fmtTime(performance.now()-t0));
-    enterApp();
+    if(cached){
+      state=cached;
+      $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
+      setLastDecrypt(performance.now()-t0); showToast('已自动解密 · '+fmtTime(performance.now()-t0)); enterApp();
+      loadAll().then(()=>{ enterApp(); }).catch(()=>{});
+    } else {
+      await loadAll();
+      $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
+      setLastDecrypt(performance.now()-t0); showToast('已自动解密 · '+fmtTime(performance.now()-t0)); enterApp();
+    }
   }catch(e){ console.warn('自动解锁失败',e); }
 })();
 </script>
