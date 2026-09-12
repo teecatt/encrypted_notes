@@ -22,7 +22,7 @@ html.dark{
   --surface:#141414; --hover:#1e1e1e; --code:#111111; --shadow:0 10px 40px rgba(0,0,0,.6);
 }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0}
+html,body{margin:0;padding:0;max-width:100%;overflow-x:hidden}
 body{background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.75;-webkit-tap-highlight-color:transparent}
 a{color:inherit}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
@@ -56,7 +56,7 @@ html.dark .i-sun{display:none}
 .nav-link:hover{background:var(--hover);color:var(--fg)}
 .nav-link.active{font-weight:600;color:var(--fg)}
 .main{flex:1 1 auto;min-width:0}
-.content{max-width:56rem;margin:0 auto;padding:32px 24px 88px}
+.content{max-width:56rem;margin:0 auto;padding:32px 24px 88px;overflow-wrap:anywhere;word-break:break-word}
 .scrim{position:fixed;inset:0;z-index:35;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .2s}
 .scrim.show{opacity:1;pointer-events:auto}
 @media(max-width:1023px){
@@ -86,7 +86,7 @@ html.dark .i-sun{display:none}
 .content th,.content td{border:1px solid var(--line);padding:.45em .7em;text-align:left}
 .content thead th{background:var(--surface)}
 .content input[type=checkbox]{margin-right:.4em}
-.garbage{white-space:pre-wrap;word-break:break-all;font-size:12px;line-height:1.65;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.garbage{white-space:pre-wrap;word-break:break-all;overflow-wrap:anywhere;overflow-x:auto;max-width:100%;font-size:12px;line-height:1.65;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 
 /* ── unlock ── */
 #unlock{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:24px}
@@ -203,7 +203,7 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
 import * as S from './store.js';
 
 const $ = id => document.getElementById(id);
-let state=null, currentId=null, token='';
+let state=null, currentId=null, token='', garbageMode=false, garbageIds=new Set();
 const escapeHtml=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
 /* markdown */
@@ -272,7 +272,8 @@ function renderPage(id){
   if(!state.pages[id]) id=state.nav[0]&&state.nav[0].id;
   currentId=id;
   $('pageTitle').textContent=state.pages[id]?id:'';
-  $('content').innerHTML=renderMd(state.pages[id]||'*(空)*');
+  if(garbageIds.has(id)) $('content').innerHTML='<pre class="garbage">'+escapeHtml(state.pages[id])+'</pre>';
+  else $('content').innerHTML=renderMd(state.pages[id]||'*(空)*');
   renderNav();
 }
 function enterApp(){
@@ -287,6 +288,7 @@ async function loadAll(){
   let list;
   if(man && Array.isArray(man.notes)){ list=man.notes.map(p=>({path:p, id:S.idFromPath(p)})); }
   else { list=await S.remoteNotes(token, true); }
+  garbageIds=new Set();
   const notes={}; let garbage=null, parsed=0; const orderCounter={};
   for(const e of list){
     const anc=S.ancestorsFromPath(e.path);
@@ -295,7 +297,7 @@ async function loadAll(){
     try{
       const dec=await S.decryptText((await S.fetchNote(e.path)).trim());
       const p=S.parseNote(dec);
-      if(!p){ if(garbage===null) garbage=dec; notes[e.id]={id:e.id,title:e.id,content:dec,order,ancestors:anc}; continue; }
+      if(!p){ if(garbage===null) garbage=dec; garbageIds.add(e.id); notes[e.id]={id:e.id,title:e.id,content:dec,order,ancestors:anc}; continue; }
       parsed++;
       notes[e.id]={id:e.id,title:p.title,content:p.content,order:p.order,ancestors:anc};
     }catch(err){ console.warn('跳过',e.path,err); }
@@ -335,7 +337,8 @@ $('unlockForm').onsubmit=async(e)=>{
     const res=await loadAll();
     $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
     setLastDecrypt(res.ms);
-    if(res.parsed===0 && res.garbage!==null) scheduleGarbage(); else showToast('已解密');
+    garbageMode=(res.parsed===0 && res.garbage!==null);
+    if(garbageMode) scheduleGarbage(); else showToast('已解密');
     enterApp();
   }catch(err){
     $('arrowIcon').classList.remove('hidden'); $('spinIcon').classList.add('hidden'); $('unlockStatus').classList.add('hidden');
@@ -346,7 +349,7 @@ $('unlockForm').onsubmit=async(e)=>{
 
 /* lock / edit / hashchange */
 $('btnLock').onclick=async()=>{ clearTimeout(garbageTimer); await idbDel(IDB_KEY); location.reload(); };
-$('btnEdit').onclick=()=>{ location.href='edit.html'+(currentId?'#'+encodeURIComponent(currentId):''); };
+$('btnEdit').onclick=()=>{ if(garbageMode){ showToast('解密异常，无法编辑'); return; } location.href='edit.html'+(currentId?'#'+encodeURIComponent(currentId):''); };
 $('menu').onclick=()=>{ $('sidebar').classList.toggle('open'); $('scrim').classList.toggle('show'); };
 $('scrim').onclick=()=>{ $('sidebar').classList.remove('open'); $('scrim').classList.remove('show'); };
 window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||'').replace(/^#\/?/,'')); });
@@ -371,7 +374,7 @@ window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||
     const t0=performance.now();
     const cached=await S.cacheGet('state');
     if(cached && cached.nav && cached.nav.length){
-      state=cached;
+      garbageMode=false; state=cached;
       $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
       setLastDecrypt(performance.now()-t0); showToast('已自动解密 · '+fmtTime(performance.now()-t0)); enterApp();
       loadAll().then(()=>{ enterApp(); }).catch(()=>{});
@@ -379,7 +382,8 @@ window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||
       const res=await loadAll();
       $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
       setLastDecrypt(res.ms);
-      if(res.parsed===0 && res.garbage!==null) scheduleGarbage(); else showToast('已自动解密 · '+fmtTime(res.ms));
+      garbageMode=(res.parsed===0 && res.garbage!==null);
+      if(garbageMode) scheduleGarbage(); else showToast('已自动解密 · '+fmtTime(res.ms));
       enterApp();
     }
   }catch(e){ console.warn('自动解锁失败',e); }
