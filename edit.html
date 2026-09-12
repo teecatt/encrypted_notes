@@ -347,12 +347,17 @@ const REASON_LABEL={draft:'定时缓存', blur:'焦点改变', background:'切�
 function reasonLabel(r){ return REASON_LABEL[r]||r||''; }
 function fmtClock(ts){ return new Date(ts).toLocaleTimeString('zh-CN',{hour12:false}); }
 async function loadVersions(){ versions=(await vAll()).sort((a,b)=>b.id-a.id); renderTimeline(); }
+/* most recent known content for a note: latest local version, else the remote copy.
+   This is the single baseline for "is there anything new to record/save?". */
+function latestContentFor(noteId){
+  const nv=versions.filter(v=>v.noteId===noteId);
+  if(nv.length){ nv.sort((a,b)=>b.id-a.id); return nv[0].content; }
+  return (cloudNotes[noteId]&&cloudNotes[noteId].content)||'';
+}
 async function snapshot(reason){
   if(!state || !currentId) return;
   const content=$('ta').value;
-  const latest=versions.find(v=>v.noteId===currentId);
-  const baseline=latest?latest.content:((cloudNotes[currentId]&&cloudNotes[currentId].content)||'');
-  if(content===baseline) return;
+  if(content===latestContentFor(currentId)) return; // identical to latest -> nothing to record
   const now=Date.now();
   const id=await vAdd({ts:now,noteId:currentId,content,reason});
   versions.unshift({id,ts:now,noteId:currentId,content,reason});
@@ -442,14 +447,14 @@ function scheduleAutosave(){ if(autosaveCfg.mode==='blur') return; cancelAutosav
 function saveDraft(){
   if(!state||!currentId) return;
   const content=$('ta').value;
-  const saved=(cloudNotes[currentId]&&cloudNotes[currentId].content)||'';
-  if(content===saved){ clearDraft(currentId); updateAutosaveInfo(); return; }
+  if(content===latestContentFor(currentId)){ clearDraft(currentId); updateAutosaveInfo(); return; }
   try{ localStorage.setItem(draftKey(currentId),JSON.stringify({c:content,t:Date.now()})); }catch(e){}
   updateAutosaveInfo();
 }
 function updateAutosaveInfo(msg){
   const el=$('autosaveInfo');
   if(msg){ el.textContent=msg; return; }
+  if(currentId&&$('ta').value===latestContentFor(currentId)){ el.textContent='无未保存内容'; return; }
   const d=loadDraft(currentId);
   el.textContent=d?('草稿缓存于 '+fmtClock(d.t)):(autosaveCfg.mode==='blur'?'失焦缓存':'定时 '+autosaveCfg.seconds+'s');
 }
@@ -469,13 +474,14 @@ function scrollPreviewToLine(line){
   pv.scrollTop=Math.max(0,top-8);
 }
 function syncPreviewFromCursor(){ if($('preview').querySelector('[data-line]')) scrollPreviewToLine(cursorLine()); }
-function onInput(){ markDirty(true); scheduleRender(); scheduleAutosave(); updateStats(); }
+function refreshDirty(){ if(currentId) markDirty($('ta').value!==latestContentFor(currentId)); }
+function onInput(){ refreshDirty(); scheduleRender(); scheduleAutosave(); updateStats(); updateAutosaveInfo(); }
 function markDirty(v){ dirty=v; $('dirtyDot').classList.toggle('hidden',!v); }
 $('ta').addEventListener('input',onInput);
 $('ta').addEventListener('click',syncPreviewFromCursor);
 $('ta').addEventListener('keyup',e=>{ if(e.key.length>1||e.key==='Enter'||e.key==='ArrowUp'||e.key==='ArrowDown') syncPreviewFromCursor(); });
 $('ta').addEventListener('scroll',()=>{ if($('preview').querySelector('[data-line]')) scrollPreviewToLine(topVisibleLine()); });
-$('ta').addEventListener('blur',()=>{ if(autosaveCfg.mode==='blur'){ saveDraft(); snapshot('blur'); } });
+$('ta').addEventListener('blur',async()=>{ if(autosaveCfg.mode==='blur'){ saveDraft(); await snapshot('blur'); refreshDirty(); updateAutosaveInfo(); } });
 
 /* data model */
 function stateToNotes(){
@@ -582,9 +588,9 @@ function selectNote(id,skipConfirm){
   if(currentId&&dirty){ saveDraft(); snapshot('switch'); }
   cancelAutosave();
   currentId=id;
-  const draft=loadDraft(id), saved=(state.pages[id]||'');
-  if(draft&&draft.c!==saved){ $('ta').value=draft.c; markDirty(true); showToast('已恢复未保存的草稿'); }
-  else { $('ta').value=saved; markDirty(false); }
+  const draft=loadDraft(id), last=latestContentFor(id);
+  if(draft&&draft.c!==last){ $('ta').value=draft.c; markDirty(true); showToast('已恢复未保存的草稿'); }
+  else { $('ta').value=last; markDirty(false); }
   renderNav(); renderTimeline(); doRender(); updateStats(); updateAutosaveInfo();
   history.replaceState(null,'','#'+id);
 }
@@ -798,9 +804,9 @@ window.addEventListener('hashchange',()=>{ const id=(location.hash||'').replace(
 
 /* boot / gate */
 function showGate(){ $('gate').classList.remove('hidden'); $('app').classList.add('hidden'); }
-function showEditor(){
+async function showEditor(){
   $('gate').classList.add('hidden'); $('app').classList.remove('hidden');
-  applySaveUI(); loadVersions();
+  applySaveUI(); await loadVersions();
   if(!state) applyNotes({});
   const id=(location.hash||'').replace(/^#\/?/,'')||(state.nav[0]&&state.nav[0].id);
   selectNote(id,true);
