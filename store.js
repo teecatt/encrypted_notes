@@ -1,7 +1,9 @@
 /* Shared encrypted per-note storage.
-   Remote: one text file per note under notesDir, mirroring the note hierarchy.
+   Remote: one flat file per note under notesDir, named by its encrypted name.
    File content = base64( iv(16B) || AES-CTR-256(magic \n order \n title \n markdown) ).
-   Decrypted docs + tree are cached locally in IndexedDB. */
+   The encrypted file name = base64url( iv(16B) || AES-CTR-256(id \n title \n ancestors) )
+   so both the title and the parent chain are hidden; hierarchy is metadata, not
+   directories. Decrypted docs + tree are cached locally in IndexedDB. */
 const OWNER='teecatt', REPO='encrypted_notes', BRANCH='dev';
 const PARAMS_URL='https://raw.githubusercontent.com/teecatt/encrypted_params/main/params.json';
 const RAW_BASE='https://raw.githubusercontent.com/'+OWNER+'/'+REPO+'/'+BRANCH+'/';
@@ -62,13 +64,15 @@ export async function decryptText(b64){
   const pt=new Uint8Array(await crypto.subtle.decrypt({name:'AES-CTR',counter:iv,length:128},aesKey,ct));
   return new TextDecoder('utf-8',{fatal:false}).decode(pt);
 }
-/* encrypted names: segment = base64url( iv(16) || AES-CTR(key, id+"\n"+title) ).
+/* encrypted names: segment = base64url( iv(16) || AES-CTR(key, id+"\n"+title+"\n"+ancestors) ).
    Same scheme/key as content. Random IV generated once and stored inside the
-   name, so it is stable while reused and two same-title siblings never collide. */
+   name, so it is stable while reused and two same-title siblings never collide.
+   ancestors = comma-joined ancestor ids (empty for roots). Old 2-line names
+   (id\ntitle) still decrypt, with ancestors=[]. */
 const bytesToB64url=b=>bytesToB64(b).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 const b64urlToBytes=s=>{ s=String(s).replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4) s+='='; return b64ToBytes(s); };
-export async function encryptName(id,title){
-  const data=new TextEncoder().encode(id+'\n'+title);
+export async function encryptName(id,title,ancestors){
+  const data=new TextEncoder().encode(id+'\n'+String(title).replace(/\n/g,' ')+'\n'+(ancestors||[]).join(','));
   const iv=crypto.getRandomValues(new Uint8Array(16));
   const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-CTR',counter:iv,length:128},aesKey,data));
   const out=new Uint8Array(iv.length+ct.length); out.set(iv,0); out.set(ct,iv.length);
@@ -80,13 +84,13 @@ export async function decryptName(seg){
     if(raw.length<17) return null;
     const pt=new Uint8Array(await crypto.subtle.decrypt({name:'AES-CTR',counter:raw.slice(0,16),length:128},aesKey,raw.slice(16)));
     const s=new TextDecoder('utf-8',{fatal:false}).decode(pt);
-    const i=s.indexOf('\n');
-    if(i<0) return null;
-    return {id:s.slice(0,i), title:s.slice(i+1)};
+    const parts=s.split('\n');
+    if(parts.length<2) return null;
+    return {id:parts[0], title:parts[1], ancestors:(parts[2]?parts[2].split(',').filter(Boolean):[])};
   }catch(e){ return null; }
 }
-export function segmentsFromPath(p){ const parts=p.split('/'); return parts.slice(1,parts.length-1); }
-export function pathFromSegments(segs){ return params.notesDir+'/'+segs.join('/')+'/note'; }
+export function segFromPath(p){ const parts=p.split('/'); return parts[parts.length-1]; }
+export function pathFromSegment(seg){ return params.notesDir+'/'+seg; }
 
 export function packNote(order,title,content){ return params.magic+'\n'+order+'\n'+String(title).replace(/\n/g,' ')+'\n'+content; }
 export function parseNote(text){
@@ -97,11 +101,6 @@ export function parseNote(text){
   return {order:parseInt(parts[0],10)||0, title:parts[1]||'', content:parts.slice(2).join('\n')};
 }
 
-/* paths */
-export function notePath(id, ancestors){ return params.notesDir+'/'+((ancestors&&ancestors.length)?ancestors.join('/')+'/':'')+id+'/note'; }
-export function idFromPath(p){ const s=p.split('/'); return s[s.length-2]; }
-export function ancestorsFromPath(p){ const s=p.split('/'); return s.slice(1, s.length-2); }
-
 /* remote */
 async function jsdelivrNotes(){
   const r=await fetch('https://data.jsdelivr.com/v1/packages/gh/'+OWNER+'/'+REPO+'@'+BRANCH+'?structure=flat',{cache:'no-store'});
@@ -109,8 +108,8 @@ async function jsdelivrNotes(){
   const j=await r.json();
   const pre='/'+params.notesDir+'/';
   return (j.files||[])
-    .filter(f=>f.name.startsWith(pre) && f.name.endsWith('/note'))
-    .map(f=>({path:f.name.slice(1), sha:f.hash, id:idFromPath(f.name.slice(1))}));
+    .filter(f=>f.name.startsWith(pre))
+    .map(f=>({path:f.name.slice(1), sha:f.hash}));
 }
 export async function remoteNotes(token, fallback){
   try{
@@ -121,8 +120,8 @@ export async function remoteNotes(token, fallback){
     const j=await r.json();
     const pre=params.notesDir+'/';
     return (j.tree||[])
-      .filter(e=>e.type==='blob' && e.path.startsWith(pre) && e.path.endsWith('/note'))
-      .map(e=>({path:e.path, sha:e.sha, id:idFromPath(e.path)}));
+      .filter(e=>e.type==='blob' && e.path.startsWith(pre))
+      .map(e=>({path:e.path, sha:e.sha}));
   }catch(e){
     if(!fallback) throw new Error('列出远端失败 '+(e.message||e));
     console.warn('GitHub API 列表失败，改用 jsDelivr：'+e.message);
