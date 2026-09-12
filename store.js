@@ -103,6 +103,25 @@ export async function remoteNotes(token, fallback){
     return await jsdelivrNotes();
   }
 }
+/* plaintext manifest listing note paths (structure only; no titles/contents).
+   Viewer reads it via raw CDN -> 0 GitHub API calls. Updated only when the
+   directory/file structure changes. */
+export async function readManifest(){
+  try{
+    const r=await fetch(RAW_BASE+'tree.json?t='+Date.now(),{cache:'no-store'});
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){ return null; }
+}
+export async function putManifest(obj, token, message){
+  const path='tree.json';
+  let sha=null;
+  try{ const cur=await gh('GET','/contents/'+path+'?ref='+BRANCH,null,token); sha=cur&&cur.sha; }catch(e){}
+  const body={message, content:bytesToB64(new TextEncoder().encode(JSON.stringify(obj)+'\n')), branch:BRANCH};
+  if(sha) body.sha=sha;
+  const j=await gh('PUT','/contents/'+path,body,token);
+  return j.content&&j.content.sha;
+}
 export async function fetchNote(path){
   const r=await fetch(RAW_BASE+path+'?t='+Date.now(),{cache:'no-store'});
   if(!r.ok) throw new Error('读取失败 '+path);
