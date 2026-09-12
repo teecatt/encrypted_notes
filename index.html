@@ -6,167 +6,282 @@
 <meta name="robots" content="noindex">
 <title>Encrypted Notes</title>
 <script>
-(function(){try{var s=localStorage.getItem("en-theme")||"dark";var d=s==="dark"||(s==="system"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme:dark)").matches);if(d)document.documentElement.classList.add("dark");else document.documentElement.classList.remove("dark");}catch(e){}})();
+(function(){try{var s=localStorage.getItem("en-theme")||"dark";var d=s==="dark"||(s==="system"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme:dark)").matches);document.documentElement.classList.toggle("dark",d);}catch(e){}})();
 </script>
-<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-<style type="text/tailwindcss">
-@custom-variant dark (&:where(.dark, .dark *));
-@theme {
-  --color-bg-light: #FFFFFF;
-  --color-bg-dark: #000000;
-  --color-surface-light: #F5F5F5;
-  --color-surface-dark: #111111;
-  --color-border-light: #E5E5E5;
-  --color-border-dark: #333333;
-  --color-text-light: #000000;
-  --color-text-dark: #FFFFFF;
-  --color-muted-light: #737373;
-  --color-muted-dark: #A3A3A3;
-  --font-sans: Inter, system-ui, sans-serif;
-}
-</style>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-<script src="https://cdn.jsdelivr.net/npm/markdown-it@14/dist/markdown-it.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11/highlight.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" onerror="this.remove()">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljsDark" disabled onerror="this.remove()">
+<script src="https://cdn.jsdelivr.net/npm/markdown-it@14/dist/markdown-it.min.js" onerror="window.__mdFail=1"></script>
+<script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11/highlight.min.js" onerror="window.__hljsFail=1"></script>
 <style>
-*{-webkit-tap-highlight-color:transparent}
-.prose pre{background:#0a0a0a;border-radius:.5rem;padding:1rem;overflow:auto}
-.prose code{font-size:.85em}
-.nav-active{font-weight:600}
-#content a{color:inherit;text-decoration:underline;text-underline-offset:2px}
+:root{
+  --bg:#ffffff; --fg:#000000; --muted:#6b6b6b; --line:#e5e5e5;
+  --surface:#f4f4f4; --hover:#ebebeb; --code:#f6f6f6; --shadow:0 10px 40px rgba(0,0,0,.18);
+}
+html.dark{
+  --bg:#000000; --fg:#ffffff; --muted:#9a9a9a; --line:#2e2e2e;
+  --surface:#141414; --hover:#1e1e1e; --code:#111111; --shadow:0 10px 40px rgba(0,0,0,.6);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.75;-webkit-tap-highlight-color:transparent}
+a{color:inherit}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+.hidden{display:none!important}
+svg{display:block}
+
+/* ── icon buttons ── */
+.icon-btn{width:38px;height:38px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;color:var(--muted);flex:0 0 auto;text-decoration:none;transition:background .15s,color .15s}
+.icon-btn:hover{background:var(--hover);color:var(--fg)}
+.icon-btn svg{width:20px;height:20px}
+.only-mobile{display:inline-flex}
+@media(min-width:1024px){.only-mobile{display:none!important}}
+
+/* theme icon: dark→moon, light→sun */
+.i-moon{display:none}
+html.dark .i-moon{display:block}
+html.dark .i-sun{display:none}
+
+/* ── header ── */
+.header{position:sticky;top:0;z-index:30;height:48px;display:flex;align-items:center;gap:2px;padding:0 10px;border-bottom:1px solid var(--line);background:var(--bg)}
+.brand{font-size:13px;font-weight:700;white-space:nowrap;padding:0 4px}
+.page-title{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:38vw}
+.spacer{flex:1 1 auto}
+
+/* ── layout ── */
+.layout{display:flex;align-items:flex-start;min-height:calc(100vh - 48px)}
+.sidebar{position:sticky;top:48px;width:264px;flex:0 0 264px;height:calc(100vh - 48px);overflow-y:auto;border-right:1px solid var(--line);padding:14px}
+.side-foot{margin-top:20px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+#debug{margin:10px 0 0;white-space:pre-wrap;word-break:break-all;font-size:11px;line-height:1.6;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.nav-link{display:block;padding:6px 9px;border-radius:7px;font-size:14px;color:var(--muted);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav-link:hover{background:var(--hover);color:var(--fg)}
+.nav-link.active{font-weight:600;color:var(--fg)}
+.main{flex:1 1 auto;min-width:0}
+.content{max-width:56rem;margin:0 auto;padding:32px 24px 88px}
+.scrim{position:fixed;inset:0;z-index:35;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .2s}
+.scrim.show{opacity:1;pointer-events:auto}
+@media(max-width:1023px){
+  .sidebar{position:fixed;top:48px;left:0;z-index:40;height:calc(100vh - 48px);transform:translateX(-100%);transition:transform .22s;background:var(--bg);width:80vw;max-width:300px;flex:none}
+  .sidebar.open{transform:translateX(0)}
+  .content{padding:20px 16px 72px}
+  .page-title{max-width:30vw}
+}
+@media(min-width:1024px){.scrim{display:none}}
+
+/* ── markdown content ── */
+.content h1{font-size:1.7em;line-height:1.3;margin:.6em 0 .5em}
+.content h2{font-size:1.32em;line-height:1.35;margin:1.5em 0 .5em;padding-bottom:.25em;border-bottom:1px solid var(--line)}
+.content h3{font-size:1.14em;margin:1.3em 0 .4em}
+.content h4{font-size:1em;margin:1.1em 0 .3em}
+.content p{margin:.75em 0}
+.content ul,.content ol{padding-left:1.6em;margin:.75em 0}
+.content li{margin:.25em 0}
+.content a{text-decoration:underline;text-underline-offset:2px}
+.content img{max-width:100%;height:auto;border-radius:8px}
+.content hr{border:0;border-top:1px solid var(--line);margin:1.8em 0}
+.content blockquote{border-left:3px solid var(--line);margin:1em 0;padding:.15em 0 .15em 1em;color:var(--muted)}
+.content code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:.1em .38em;font-size:.88em;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.content pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow:auto;margin:1em 0}
+.content pre code{background:none;border:0;padding:0;font-size:.86em}
+.content table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.92em;display:block;overflow-x:auto}
+.content th,.content td{border:1px solid var(--line);padding:.45em .7em;text-align:left}
+.content thead th{background:var(--surface)}
+.content input[type=checkbox]{margin-right:.4em}
+.garbage{white-space:pre-wrap;word-break:break-all;font-size:12px;line-height:1.65;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+/* ── unlock ── */
+#unlock{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:24px}
+.top-actions{position:fixed;top:10px;right:10px;z-index:60;display:flex;gap:2px}
+.unlock-card{width:100%;max-width:320px;border:1px solid var(--line);border-radius:18px;background:var(--bg);padding:30px 24px;text-align:center}
+.lock-badge{color:var(--fg)}
+.lock-badge svg{width:44px;height:44px;margin:0 auto}
+.pw-input{width:100%;margin-top:18px;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:14px;text-align:center;outline:none}
+.pw-input:focus{border-color:var(--fg)}
+.unlock-btn{width:52px;height:52px;margin:20px auto 0;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--fg);transition:border-color .15s}
+.unlock-btn:hover{border-color:var(--fg)}
+.unlock-btn svg{width:22px;height:22px}
+.unlock-status{font-size:12px;color:var(--muted);margin-top:14px;min-height:16px}
+.unlock-msg{font-size:12px;margin-top:8px;min-height:16px}
+.spin{width:20px;height:20px;border:2px solid var(--line);border-top-color:var(--fg);border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.err{color:#e5484d}
+
+/* ── overlays / cards ── */
+.overlay{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:20px}
+.card{width:100%;max-width:420px;background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow)}
+.card h2{margin:0 0 10px;font-size:16px;display:flex;align-items:center;gap:8px}
+.card p{margin:.6em 0;font-size:14px}
+.card code{background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:.1em .35em;font-size:.88em}
+.card-actions{margin-top:18px;display:flex;justify-content:center}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 18px;border-radius:9px;font-size:14px;font-weight:600;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+.btn:hover{background:var(--hover)}
+.btn-primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn-primary:hover{opacity:.85;background:var(--fg)}
+
+/* ── editor ── */
+#editor{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.5);display:flex;justify-content:center}
+.editor-card{width:100%;max-width:840px;background:var(--bg);display:flex;flex-direction:column;min-height:0}
+.editor-head{display:flex;align-items:center;gap:8px;height:48px;padding:0 12px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.editor-title{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#editArea{flex:1 1 auto;width:100%;resize:none;padding:16px;border:0;outline:none;background:var(--surface);color:var(--fg);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px;line-height:1.7}
+#saveMsg{padding:8px 14px;font-size:12px;border-top:1px solid var(--line);min-height:32px;flex:0 0 auto}
+@media(min-width:640px){
+  #editor{padding:24px}
+  .editor-card{border:1px solid var(--line);border-radius:16px;overflow:hidden;max-height:100%}
+}
+
+/* ── toast (Android-style, bottom-center, non-blocking) ── */
+#toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(12px);z-index:95;max-width:calc(100vw - 32px);padding:10px 18px;border-radius:999px;background:rgba(20,20,20,.92);color:#fff;font-size:13px;line-height:1.4;text-align:center;opacity:0;pointer-events:none;transition:opacity .22s,transform .22s}
+html.dark #toast{background:rgba(245,245,245,.94);color:#000}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
-<body class="bg-bg-light dark:bg-bg-dark text-text-light dark:text-text-dark font-sans min-h-screen">
+<body>
 
 <!-- Toast -->
-<div id="toast" class="hidden fixed top-3 left-1/2 -translate-x-1/2 z-[70] px-4 py-2 rounded-lg text-xs shadow-lg border border-border-light dark:border-border-dark bg-white dark:bg-surface-dark text-text-light dark:text-text-dark"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <!-- Unlock overlay -->
-<div id="unlock" class="fixed inset-0 z-50 flex items-center justify-center bg-bg-light dark:bg-bg-dark p-6">
-  <form id="unlockForm" class="relative w-full max-w-xs rounded-2xl border border-border-light dark:border-border-dark bg-white dark:bg-surface-dark p-6 text-center">
-    <div class="absolute top-3 right-3 flex items-center gap-1">
-      <button id="theme-toggle-unlock" type="button" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="主题"><span class="material-icons text-lg" data-theme-icon>dark_mode</span></button>
-      <a href="https://down2.top/encrypted_params/about.html" target="_blank" rel="noopener" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="关于加密技术细节" aria-label="关于加密技术细节">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      </a>
-    </div>
-    <span class="material-icons" style="font-size:40px">lock</span>
-    <input id="pw" type="password" placeholder="密码" autocomplete="current-password"
-      class="w-full mt-4 px-3 py-2.5 rounded-lg border border-border-light dark:border-border-dark bg-surface-light dark:bg-bg-dark text-sm text-center outline-none focus:border-text-light dark:focus:border-text-dark">
-    <div class="mt-5 flex justify-center">
-      <button id="btnUnlock" type="submit" class="w-12 h-12 rounded-full border-2 border-border-light dark:border-border-dark flex items-center justify-center text-text-light dark:text-text-dark hover:border-text-light dark:hover:border-text-dark transition-colors" title="解锁" aria-label="解锁">
-        <svg id="arrowIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-        <span id="spinIcon" class="material-icons animate-spin" style="font-size:20px;display:none">autorenew</span>
-      </button>
-    </div>
-    <div id="unlockStatus" class="hidden text-xs text-muted-light dark:text-muted-dark mt-3 min-h-[16px]"></div>
-    <div id="unlockMsg" class="text-xs mt-2 min-h-[16px]"></div>
+<div id="unlock">
+  <div class="top-actions">
+    <a class="icon-btn" href="https://down2.top/encrypted_params/about.html" target="_blank" rel="noopener" title="关于加密技术细节" aria-label="关于加密技术细节"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10,19H13V22H10V19M12,2C17.35,2.22 19.68,7.62 16.5,11.67C15.67,12.67 14.33,13.33 13.67,14.17C13,15 13,16 13,17H10C10,15.33 10,13.92 10.67,12.92C11.33,11.92 12.67,11.33 13.5,10.67C15.92,8.43 15.32,5.26 12,5A3,3 0 0,0 9,8H6A6,6 0 0,1 12,2Z"/></svg></a>
+    <button id="theme-toggle-unlock" class="icon-btn" title="主题" aria-label="主题"><svg class="i-sun" viewBox="0 0 24 24" fill="currentColor"><path d="M12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,2L14.39,5.42C13.65,5.15 12.84,5 12,5C11.16,5 10.35,5.15 9.61,5.42L12,2M3.34,7L7.5,6.65C6.9,7.16 6.36,7.78 5.94,8.5C5.5,9.24 5.25,10 5.11,10.79L3.34,7M3.36,17L5.12,13.23C5.26,14 5.53,14.78 5.95,15.5C6.37,16.24 6.91,16.86 7.5,17.37L3.36,17M20.65,7L18.88,10.79C18.74,10 18.47,9.23 18.05,8.5C17.63,7.78 17.1,7.15 16.5,6.64L20.65,7M20.64,17L16.5,17.36C17.09,16.85 17.62,16.22 18.04,15.5C18.46,14.77 18.73,14 18.87,13.21L20.64,17M12,22L9.59,18.56C10.33,18.83 11.14,19 12,19C12.82,19 13.63,18.83 14.37,18.56L12,22Z"/></svg><svg class="i-moon" viewBox="0 0 24 24" fill="currentColor"><path d="M17.75,4.09L15.22,6.03L16.13,9.09L13.5,7.28L10.87,9.09L11.78,6.03L9.25,4.09L12.44,4L13.5,1L14.56,4L17.75,4.09M21.25,11L19.61,12.25L20.2,14.23L18.5,13.06L16.8,14.23L17.39,12.25L15.75,11L17.81,10.95L18.5,9L19.19,10.95L21.25,11M18.97,15.95C19.8,15.87 20.69,17.05 20.16,17.8C19.84,18.25 19.5,18.67 19.08,19.07C15.17,23 8.84,23 4.94,19.07C1.03,15.17 1.03,8.83 4.94,4.93C5.34,4.53 5.76,4.17 6.21,3.85C6.96,3.32 8.14,4.21 8.06,5.04C7.79,7.9 8.75,10.87 10.95,13.06C13.14,15.26 16.1,16.22 18.97,15.95M17.33,17.97C14.5,17.81 11.7,16.64 9.53,14.5C7.36,12.31 6.2,9.5 6.04,6.68C3.23,9.82 3.34,14.64 6.35,17.66C9.37,20.67 14.19,20.78 17.33,17.97Z"/></svg></button>
+  </div>
+  <form id="unlockForm" class="unlock-card">
+    <div class="lock-badge"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12,17A2,2 0 0,0 14,15C14,13.89 13.1,13 12,13A2,2 0 0,0 10,15A2,2 0 0,0 12,17M18,8A2,2 0 0,1 20,10V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V10C4,8.89 4.9,8 6,8H7V6A5,5 0 0,1 12,1A5,5 0 0,1 17,6V8H18M12,3A3,3 0 0,0 9,6V8H15V6A3,3 0 0,0 12,3Z"/></svg></div>
+    <input id="pw" type="password" class="pw-input" placeholder="密码" autocomplete="current-password">
+    <button id="btnUnlock" type="submit" class="unlock-btn" title="解锁" aria-label="解锁">
+      <svg id="arrowIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      <span id="spinIcon" class="spin hidden"></span>
+    </button>
+    <div id="unlockStatus" class="unlock-status hidden"></div>
+    <div id="unlockMsg" class="unlock-msg"></div>
   </form>
 </div>
 
 <!-- App -->
-<div id="app" class="hidden min-h-screen">
-  <header class="sticky top-0 z-30 flex items-center gap-2 h-12 px-4 border-b border-border-light dark:border-border-dark bg-bg-light dark:bg-bg-dark">
-    <button id="menu" class="lg:hidden p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark"><span class="material-icons text-lg">menu</span></button>
-    <span class="text-sm font-bold text-text-light dark:text-text-dark">encrypted_notes</span>
-    <span id="pageTitle" class="text-xs text-muted-light dark:text-muted-dark truncate"></span>
-    <div class="flex-1"></div>
-    <button id="theme-toggle" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="主题"><span class="material-icons text-lg" data-theme-icon>dark_mode</span></button>
-    <a id="btnHelp" href="https://down2.top/encrypted_params/about.html" target="_blank" rel="noopener" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="关于加密技术细节" aria-label="关于加密技术细节"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>
-    <button id="btnEdit" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="编辑"><span class="material-icons text-lg">edit</span></button>
-    <button id="btnLock" class="p-1.5 rounded-lg text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-surface-dark" title="清空本机密钥/Token"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13C19.34 13 19.67 13.04 20 13.09V10C20 8.9 19.11 8 18 8H17V6C17 3.24 14.76 1 12 1S7 3.24 7 6V8H6C4.9 8 4 8.89 4 10V20C4 21.11 4.89 22 6 22H13.81C13.3 21.12 13 20.1 13 19C13 15.69 15.69 13 19 13M9 6C9 4.34 10.34 3 12 3S15 4.34 15 6V8H9V6M12 17C10.9 17 10 16.11 10 15S10.9 13 12 13C13.1 13 14 13.89 14 15C14 16.11 13.11 17 12 17M20.41 19L22.54 21.12L21.12 22.54L19 20.41L16.88 22.54L15.47 21.12L17.59 19L15.47 16.88L16.88 15.47L19 17.59L21.12 15.47L22.54 16.88L20.41 19Z"/></svg></button>
+<div id="app" class="hidden">
+  <header class="header">
+    <button id="menu" class="icon-btn only-mobile" title="目录" aria-label="目录"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z"/></svg></button>
+    <span id="brand" class="brand">encrypted_notes</span>
+    <span id="pageTitle" class="page-title"></span>
+    <span class="spacer"></span>
+    <button id="btnLock" class="icon-btn" title="清空本机密钥/Token" aria-label="清空本机密钥"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13C19.34 13 19.67 13.04 20 13.09V10C20 8.9 19.11 8 18 8H17V6C17 3.24 14.76 1 12 1S7 3.24 7 6V8H6C4.9 8 4 8.89 4 10V20C4 21.11 4.89 22 6 22H13.81C13.3 21.12 13 20.1 13 19C13 15.69 15.69 13 19 13M9 6C9 4.34 10.34 3 12 3S15 4.34 15 6V8H9V6M12 17C10.9 17 10 16.11 10 15S10.9 13 12 13C13.1 13 14 13.89 14 15C14 16.11 13.11 17 12 17M20.41 19L22.54 21.12L21.12 22.54L19 20.41L16.88 22.54L15.47 21.12L17.59 19L15.47 16.88L16.88 15.47L19 17.59L21.12 15.47L22.54 16.88L20.41 19Z"/></svg></button>
+    <button id="btnEdit" class="icon-btn" title="编辑" aria-label="编辑"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z"/></svg></button>
+    <a id="btnHelp" class="icon-btn" href="https://down2.top/encrypted_params/about.html" target="_blank" rel="noopener" title="关于加密技术细节" aria-label="关于加密技术细节"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10,19H13V22H10V19M12,2C17.35,2.22 19.68,7.62 16.5,11.67C15.67,12.67 14.33,13.33 13.67,14.17C13,15 13,16 13,17H10C10,15.33 10,13.92 10.67,12.92C11.33,11.92 12.67,11.33 13.5,10.67C15.92,8.43 15.32,5.26 12,5A3,3 0 0,0 9,8H6A6,6 0 0,1 12,2Z"/></svg></a>
+    <button id="theme-toggle" class="icon-btn" title="主题" aria-label="主题"><svg class="i-sun" viewBox="0 0 24 24" fill="currentColor"><path d="M12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,2L14.39,5.42C13.65,5.15 12.84,5 12,5C11.16,5 10.35,5.15 9.61,5.42L12,2M3.34,7L7.5,6.65C6.9,7.16 6.36,7.78 5.94,8.5C5.5,9.24 5.25,10 5.11,10.79L3.34,7M3.36,17L5.12,13.23C5.26,14 5.53,14.78 5.95,15.5C6.37,16.24 6.91,16.86 7.5,17.37L3.36,17M20.65,7L18.88,10.79C18.74,10 18.47,9.23 18.05,8.5C17.63,7.78 17.1,7.15 16.5,6.64L20.65,7M20.64,17L16.5,17.36C17.09,16.85 17.62,16.22 18.04,15.5C18.46,14.77 18.73,14 18.87,13.21L20.64,17M12,22L9.59,18.56C10.33,18.83 11.14,19 12,19C12.82,19 13.63,18.83 14.37,18.56L12,22Z"/></svg><svg class="i-moon" viewBox="0 0 24 24" fill="currentColor"><path d="M17.75,4.09L15.22,6.03L16.13,9.09L13.5,7.28L10.87,9.09L11.78,6.03L9.25,4.09L12.44,4L13.5,1L14.56,4L17.75,4.09M21.25,11L19.61,12.25L20.2,14.23L18.5,13.06L16.8,14.23L17.39,12.25L15.75,11L17.81,10.95L18.5,9L19.19,10.95L21.25,11M18.97,15.95C19.8,15.87 20.69,17.05 20.16,17.8C19.84,18.25 19.5,18.67 19.08,19.07C15.17,23 8.84,23 4.94,19.07C1.03,15.17 1.03,8.83 4.94,4.93C5.34,4.53 5.76,4.17 6.21,3.85C6.96,3.32 8.14,4.21 8.06,5.04C7.79,7.9 8.75,10.87 10.95,13.06C13.14,15.26 16.1,16.22 18.97,15.95M17.33,17.97C14.5,17.81 11.7,16.64 9.53,14.5C7.36,12.31 6.2,9.5 6.04,6.68C3.23,9.82 3.34,14.64 6.35,17.66C9.37,20.67 14.19,20.78 17.33,17.97Z"/></svg></button>
   </header>
 
-  <div class="flex">
-    <aside id="sidebar" class="hidden lg:block w-60 shrink-0 border-r border-border-light dark:border-border-dark min-h-[calc(100vh-3rem)] p-4">
-      <nav id="nav" class="text-sm space-y-0.5"></nav>
-      <div class="mt-6 pt-4 border-t border-border-light dark:border-border-dark text-xs text-muted-light dark:text-muted-dark">
+  <div class="layout">
+    <aside id="sidebar" class="sidebar">
+      <nav id="nav"></nav>
+      <div class="side-foot">
         <div id="modeInfo"></div>
-        <pre id="debug" class="mt-3 whitespace-pre-wrap break-all text-[11px] leading-relaxed text-muted-light dark:text-muted-dark"></pre>
+        <pre id="debug"></pre>
       </div>
     </aside>
-    <main class="flex-1 min-w-0">
-      <article id="content" class="prose prose-lg dark:prose-invert max-w-3xl mx-auto px-6 py-8"></article>
+    <div id="scrim" class="scrim"></div>
+    <main class="main">
+      <article id="content" class="content"></article>
     </main>
   </div>
 </div>
 
 <!-- Editor -->
-<div id="editor" class="hidden fixed inset-0 z-40 bg-black/50 p-0 sm:p-6">
-  <div class="h-full sm:h-auto sm:max-h-full sm:max-w-3xl sm:mx-auto rounded-none sm:rounded-2xl bg-white dark:bg-surface-dark border border-border-light dark:border-border-dark flex flex-col">
-    <div class="flex items-center gap-2 px-4 h-12 border-b border-border-light dark:border-border-dark">
-      <span class="text-sm font-semibold">编辑 · <span id="editId"></span></span>
-      <div class="flex-1"></div>
-      <button id="btnCancel" class="px-3 py-1.5 rounded-lg text-sm text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-bg-dark">取消</button>
-      <button id="btnSave" class="px-4 py-1.5 rounded-lg text-sm font-semibold bg-text-light dark:bg-text-dark text-white dark:text-black hover:opacity-80">保存到 dev</button>
+<div id="editor" class="hidden">
+  <div class="editor-card">
+    <div class="editor-head">
+      <span class="editor-title">编辑 · <span id="editId"></span></span>
+      <span class="spacer"></span>
+      <button id="btnCancel" class="btn">取消</button>
+      <button id="btnSave" class="btn btn-primary">保存到 dev</button>
     </div>
-    <textarea id="editArea" class="flex-1 w-full resize-none p-4 bg-surface-light dark:bg-bg-dark font-mono text-sm outline-none"></textarea>
-    <div id="saveMsg" class="px-4 py-2 text-xs border-t border-border-light dark:border-border-dark min-h-[32px]"></div>
+    <textarea id="editArea" spellcheck="false"></textarea>
+    <div id="saveMsg"></div>
   </div>
 </div>
 
-<!-- Token prompt (shown only when editing) -->
-<div id="tokenModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6">
-  <form id="tokenForm" class="w-full max-w-sm rounded-2xl border border-border-light dark:border-border-dark bg-white dark:bg-surface-dark p-6">
-    <h2 class="text-base font-bold mb-1 flex items-center gap-2"><span class="material-icons">key</span> 需要 GitHub Token</h2>
-    <p class="text-xs text-muted-light dark:text-muted-dark mb-4">仅用于把加密笔记提交到 <code>encrypted_notes</code> 的 <code>dev</code> 分支，只存内存，不落盘。</p>
-    <input id="tk" type="password" placeholder="github_pat_..." autocomplete="off"
-      class="w-full px-3 py-2.5 rounded-lg border border-border-light dark:border-border-dark bg-surface-light dark:bg-bg-dark text-sm outline-none focus:border-text-light dark:focus:border-text-dark mb-3">
-    <div class="flex gap-2">
-      <button type="button" id="tkCancel" class="flex-1 py-2.5 rounded-lg border border-border-light dark:border-border-dark text-sm text-muted-light dark:text-muted-dark">取消</button>
-      <button type="submit" class="flex-1 py-2.5 rounded-lg bg-text-light dark:bg-text-dark text-white dark:text-black text-sm font-semibold hover:opacity-80">确认</button>
+<!-- Token prompt -->
+<div id="tokenModal" class="hidden overlay">
+  <form id="tokenForm" class="card">
+    <h2><svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px"><path d="M7,14A2,2 0 0,1 5,12A2,2 0 0,1 7,10A2,2 0 0,1 9,12A2,2 0 0,1 7,14M12.65,10C11.83,7.67 9.61,6 7,6A6,6 0 0,0 1,12A6,6 0 0,0 7,18C9.61,18 11.83,16.33 12.65,14H17V18H21V14H23V10H12.65Z"/></svg> 需要 GitHub Token</h2>
+    <p class="muted" style="color:var(--muted)">仅用于把加密笔记提交到 <code>encrypted_notes</code> 的 <code>dev</code> 分支，只存内存，不落盘。</p>
+    <input id="tk" type="password" class="pw-input" style="text-align:left" placeholder="github_pat_..." autocomplete="off">
+    <div class="card-actions" style="gap:8px">
+      <button type="button" id="tkCancel" class="btn" style="flex:1">取消</button>
+      <button type="submit" class="btn btn-primary" style="flex:1">确认</button>
     </div>
   </form>
 </div>
 
 <!-- Garbage / wrong-key notice -->
-<div id="garbageModal" class="hidden fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-6">
-  <div class="relative w-full max-w-md rounded-2xl border border-border-light dark:border-border-dark bg-white dark:bg-surface-dark p-6 text-sm">
-    <button id="garbageClose" class="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg text-lg leading-none text-muted-light dark:text-muted-dark hover:bg-surface-light dark:hover:bg-bg-dark" title="关闭" aria-label="关闭">&times;</button>
-    <h2 class="text-base font-bold mb-3 flex items-center gap-2"><span class="material-icons">report</span> 检测到乱码</h2>
-    <p class="mb-3 text-text-light dark:text-text-dark">检测到解密结果为人类无法阅读的乱码。</p>
-    <p class="mb-3 text-muted-light dark:text-muted-dark">当前页面为仅 demo 演示，真实密码为 <code class="px-1 py-0.5 rounded bg-surface-light dark:bg-bg-dark">password</code>，可点击右上角清空旧密钥按钮重新输入密码。</p>
-    <p class="text-muted-light dark:text-muted-dark">关于涉及的技术细节可点击右上角帮助。</p>
+<div id="garbageModal" class="hidden overlay">
+  <div class="card">
+    <h2><svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px"><path d="M13,13H11V7H13M13,17H11V15H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"/></svg> 检测到乱码</h2>
+    <p>检测到解密结果为人类无法阅读的乱码。</p>
+    <p style="color:var(--muted)">当前页面为仅 demo 演示，真实密码为 <code>password</code>，可点击右上角清空旧密钥按钮重新输入密码。</p>
+    <p style="color:var(--muted)">关于涉及的技术细节可点击右上角帮助。</p>
+    <div class="card-actions"><button id="garbageClose" class="btn btn-primary">关闭</button></div>
   </div>
 </div>
 
 <script type="module">
-import { argon2id } from 'https://cdn.jsdelivr.net/npm/@noble/hashes@2.4.0/argon2.js';
-
 const PARAMS_URL = 'https://raw.githubusercontent.com/teecatt/encrypted_params/main/params.json';
 const NOTES_RAW  = 'https://raw.githubusercontent.com/teecatt/encrypted_notes/dev/notes.enc.json';
 const API_URL    = 'https://api.github.com/repos/teecatt/encrypted_notes/contents/notes.enc.json';
 const ARGON2_URL = new URL('vendor/argon2-bundled.min.js', location.href).href;
 
 const $ = id => document.getElementById(id);
-let params=null, aesKey=null, state=null, token='', currentId=null, dirty=false, garbageText=null, remembered=false;
+let params=null, aesKey=null, state=null, token='', currentId=null, garbageText=null, remembered=false, lastDecryptMs=0;
 
 const bytesToB64 = b => { let s=''; b.forEach(x=>s+=String.fromCharCode(x)); return btoa(s); };
 const b64ToBytes = s => { const bin=atob(s); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; };
 const hexToBytes = h => { const a=new Uint8Array(h.length/2); for(let i=0;i<a.length;i++)a[i]=parseInt(h.substr(i*2,2),16); return a; };
 const utf8ToB64  = s => bytesToB64(new TextEncoder().encode(s));
 
-const md = markdownit({
-  html:false, linkify:true, typographer:true,
-  highlight(str, lang){
-    if(lang && hljs.getLanguage(lang)){
-      try{ return '<pre class="hljs"><code>'+hljs.highlight(str,{language:lang,ignoreIllegals:true}).value+'</code></pre>'; }catch(e){}
-    }
-    return '<pre class="hljs"><code>'+str.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))+'</code></pre>';
+function renderMarkdown(src){
+  if(window.markdownit){
+    try{ return md.render(src); }catch(e){ console.warn('markdown 渲染失败', e); }
   }
-});
+  return '<pre class="garbage">'+escapeHtml(src)+'</pre>';
+}
+let md=null;
+if(window.markdownit){
+  md = window.markdownit({
+    html:false, linkify:true, typographer:true,
+    highlight(str, lang){
+      if(window.hljs && lang && hljs.getLanguage(lang)){
+        try{ return '<pre class="hljs"><code>'+hljs.highlight(str,{language:lang,ignoreIllegals:true}).value+'</code></pre>'; }catch(e){}
+      }
+      return '<pre class="hljs"><code>'+escapeHtml(str)+'</code></pre>';
+    }
+  });
+}
 
+/* ── time formatting (ns / µs / ms / s) ── */
+function fmtTime(ms){
+  if(!isFinite(ms) || ms<=0) return '0 ns';
+  if(ms>=1000) return (ms/1000).toFixed(2)+' s';
+  if(ms>=1) return (Math.round(ms*100)/100)+' ms';
+  const us=ms*1000;
+  if(us>=1) return (Math.round(us*100)/100)+' µs';
+  return Math.round(us*1000)+' ns';
+}
+function setLastDecrypt(ms){ lastDecryptMs=ms; const b=$('brand'); if(b) b.textContent='上次解密: '+fmtTime(ms); }
+
+/* ── crypto ── */
 async function loadParams(){
   const r = await fetch(PARAMS_URL, {cache:'no-store'});
   if(!r.ok) throw new Error('params 加载失败 '+r.status);
   params = await r.json();
 }
-
+let nobleArgon2id=null;
 async function deriveKeyNoble(pw){
+  if(!nobleArgon2id){
+    const mod=await import('https://cdn.jsdelivr.net/npm/@noble/hashes@2.4.0/argon2.js');
+    nobleArgon2id=mod.argon2id;
+  }
   const salt = hexToBytes(params.salt);
-  const raw = argon2id(new TextEncoder().encode(pw), salt, {t:params.time, m:params.memKiB, p:params.parallelism, dkLen:params.hashLen});
+  const raw = nobleArgon2id(new TextEncoder().encode(pw), salt, {t:params.time, m:params.memKiB, p:params.parallelism, dkLen:params.hashLen});
   return await crypto.subtle.importKey('raw', raw, {name:'AES-CTR'}, false, ['encrypt','decrypt']);
 }
 function deriveKeyWasm(pw){
@@ -192,10 +307,10 @@ function deriveKeyWasm(pw){
 let lastEngine='';
 async function deriveKey(pw){
   try{ const k=await deriveKeyWasm(pw); lastEngine='wasm'; return k; }
-  catch(e){ console.warn('WASM 解密失败，回退纯 JS：'+e.message); lastEngine='js'; return await deriveKeyNoble(pw); }
+  catch(e){ console.warn('WASM 派生失败，回退纯 JS：'+e.message); lastEngine='js'; return await deriveKeyNoble(pw); }
 }
 
-/* ── 本机存储（IndexedDB：不可导出 CryptoKey + GitHub Token） ── */
+/* ── IndexedDB: non-extractable CryptoKey + token ── */
 const IDB_NAME='en-keys', IDB_STORE='keys', IDB_KEY='aes', IDB_TOKEN='token';
 function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=()=>{ r.result.createObjectStore(IDB_STORE); }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 async function idbGet(k){ try{ const db=await idbOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }catch(e){ return null; } }
@@ -220,7 +335,6 @@ async function encryptNotes(obj){
   const ct = new Uint8Array(await crypto.subtle.encrypt({name:'AES-CTR', counter:iv, length:128}, aesKey, data));
   return {v:1, alg:'AES-CTR-256', iv:bytesToB64(iv), ct:bytesToB64(ct)};
 }
-
 async function fetchNotes(){
   const r = await fetch(NOTES_RAW + '?t=' + Date.now(), {cache:'no-store'});
   if(!r.ok) throw new Error('笔记加载失败 '+r.status);
@@ -229,6 +343,7 @@ async function fetchNotes(){
 
 function escapeHtml(s){ return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
+/* ── nav / content ── */
 function renderNav(){
   const nav=$('nav'); nav.innerHTML='';
   if(!state || !state.nav) return;
@@ -236,44 +351,44 @@ function renderNav(){
     for(const it of items){
       const a=document.createElement('a');
       a.href='#'+it.id; a.dataset.id=it.id;
-      a.className='block py-1.5 rounded hover:bg-surface-light dark:hover:bg-surface-dark text-muted-light dark:text-muted-dark';
-      a.style.paddingLeft=(8+depth*14)+'px';
+      a.className='nav-link'+(it.id===currentId?' active':'');
+      a.style.paddingLeft=(9+depth*14)+'px';
       a.textContent=it.title;
-      if(it.id===currentId) a.classList.add('nav-active');
       nav.appendChild(a);
       if(it.children) add(it.children, depth+1);
     }
   };
   add(state.nav, 0);
 }
-
 function showGarbage(text){
   $('pageTitle').textContent='';
-  $('content').innerHTML='<pre class="whitespace-pre-wrap break-all text-xs leading-relaxed">'+escapeHtml(text)+'</pre>';
+  $('content').innerHTML='<pre class="garbage">'+escapeHtml(text)+'</pre>';
   renderNav();
 }
-
 function renderPage(id){
   if(!state || !state.pages){ showGarbage(garbageText||''); return; }
-  if(!state.pages[id]){ currentId=state.nav[0]?.id; id=currentId; }
+  if(!state.pages[id]){ id=state.nav[0]?.id; }
   currentId=id;
   $('pageTitle').textContent = state.pages[id] ? id : '';
-  $('content').innerHTML = md.render(state.pages[id] || '*(空)*');
+  $('content').innerHTML = renderMarkdown(state.pages[id] || '*(空)*');
   renderNav();
 }
+function enterApp(){
+  if(state && state.nav){
+    const id=(location.hash||'').replace(/^#\/?/,'') || state.nav[0].id;
+    renderPage(id);
+  } else {
+    renderPage(null);
+    if(garbageText !== null) scheduleGarbageModal();
+  }
+}
 
-let lastMs=parseInt(localStorage.getItem('en_last_ms')||'0',10)||0;
+/* ── mode / debug ── */
 function updateMode(){
   const parts=[token?'可编辑 · 保存时提交到 dev':'保存时输入 Token 即可提交'];
   if(token) parts.push('Token 已存本机');
   if(remembered) parts.push('密钥已存本机');
-  if(lastMs) parts.push('上次解密 '+lastMs+' ms');
   $('modeInfo').textContent=parts.join(' · ');
-}
-let toastTimer=null;
-function showToast(msg){
-  const t=$('toast'); t.textContent=msg; t.classList.remove('hidden');
-  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.add('hidden'),4500);
 }
 function setDebug(dbg){
   const eng = lastEngine==='wasm' ? 'WASM（快）' : lastEngine==='js' ? '纯 JS（慢，回退）' : '?';
@@ -286,41 +401,38 @@ function setDebug(dbg){
     '实际  '+dbg.work+' ms';
   console.log('[解密耗时]', dbg, 'engine='+lastEngine);
 }
-function enterApp(){
-  if(state && state.nav){
-    const id=(location.hash||'').replace(/^#\/?/,'') || state.nav[0].id;
-    renderPage(id);
-  } else {
-    renderPage(null);
-    if(garbageText !== null) $('garbageModal').classList.remove('hidden');
-  }
-}
 function showApp(dbg){
   $('unlock').classList.add('hidden');
   $('app').classList.remove('hidden');
   if(dbg){
-    lastMs=dbg.work;
-    showToast('✓ 已解密 · '+dbg.work+' ms');
+    showToast('已解密 · '+fmtTime(dbg.work));
     setDebug(dbg);
   }
   updateMode();
+}
+
+/* ── toast ── */
+let toastTimer=null;
+function showToast(msg){
+  const t=$('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),4000);
 }
 
 /* ── unlock ── */
 $('unlockForm').onsubmit = async (e) => {
   e.preventDefault();
   const pw=$('pw').value;
-  if(!pw){ $('unlockMsg').textContent='请输入密码'; $('unlockMsg').className='text-xs mt-2 text-red-500'; return; }
+  if(!pw){ $('unlockMsg').textContent='请输入密码'; $('unlockMsg').className='unlock-msg err'; return; }
   $('btnUnlock').disabled=true; $('pw').disabled=true;
   $('unlockMsg').textContent='';
-  $('arrowIcon').style.display='none';
-  $('spinIcon').style.display='inline-block';
+  $('arrowIcon').classList.add('hidden');
+  $('spinIcon').classList.remove('hidden');
   $('unlockStatus').classList.remove('hidden');
   const setStatus=(t)=>{ $('unlockStatus').textContent=t; };
   setStatus('Generate key…');
   const t0=performance.now();
   const dbg={params:0,derive:0,fetch:0,decrypt:0,work:0,total:0};
-  const derivePromise=(async()=>{
+  try{
     let a=performance.now();
     if(!params) await loadParams();
     dbg.params=performance.now()-a;
@@ -339,26 +451,42 @@ $('unlockForm').onsubmit = async (e) => {
     state=r.state; garbageText=r.garbage;
     dbg.work=Math.round(performance.now()-t0);
     ['params','derive','fetch','decrypt'].forEach(k=>dbg[k]=Math.round(dbg[k]));
-  })();
-  derivePromise.catch(()=>{});
-  try{
-    await derivePromise;
     dbg.total=Math.round(performance.now()-t0);
-    localStorage.setItem('en_last_ms', String(dbg.work));
     try{ await idbPut(IDB_KEY, aesKey); remembered=true; }catch(e){}
+    setLastDecrypt(dbg.work);
     showApp(dbg);
     enterApp();
   }catch(err){
-    $('arrowIcon').style.display='';
-    $('spinIcon').style.display='none';
+    $('arrowIcon').classList.remove('hidden');
+    $('spinIcon').classList.add('hidden');
     $('unlockStatus').classList.add('hidden');
     $('pw').disabled=false; $('btnUnlock').disabled=false;
     $('unlockMsg').textContent='解密失败：'+err.message;
-    $('unlockMsg').className='text-xs mt-2 text-red-500';
+    $('unlockMsg').className='unlock-msg err';
   }
 };
 
-/* ── token prompt (only when editing) ── */
+/* ── garbage modal (2s delay) ── */
+let garbageTimer=null;
+function scheduleGarbageModal(){
+  clearTimeout(garbageTimer);
+  garbageTimer=setTimeout(()=>$('garbageModal').classList.remove('hidden'), 2000);
+}
+function copyText(t){
+  if(navigator.clipboard && window.isSecureContext){ return navigator.clipboard.writeText(t); }
+  return new Promise((res,rej)=>{
+    try{ const ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); res(); }
+    catch(e){ rej(e); }
+  });
+}
+$('garbageClose').onclick = async () => {
+  clearTimeout(garbageTimer);
+  $('garbageModal').classList.add('hidden');
+  try{ await copyText('password'); showToast('密码已复制: password'); }
+  catch(e){ showToast('复制失败，请手动输入: password'); }
+};
+
+/* ── token prompt ── */
 let tokenResolver=null;
 function askToken(){
   return new Promise(resolve=>{
@@ -389,7 +517,6 @@ $('btnEdit').onclick = () => {
   $('editor').classList.remove('hidden');
 };
 $('btnCancel').onclick = () => $('editor').classList.add('hidden');
-
 $('btnSave').onclick = async () => {
   const text=$('editArea').value;
   if(!token){
@@ -400,7 +527,7 @@ $('btnSave').onclick = async () => {
   state.pages[currentId]=text;
   $('btnSave').disabled=true;
   $('saveMsg').textContent='加密并提交中…';
-  $('saveMsg').className='px-4 py-2 text-xs border-t border-border-light dark:border-border-dark min-h-[32px] text-yellow-500';
+  $('saveMsg').style.color='#eab308';
   try{
     const enc=await encryptNotes(state);
     const body=JSON.stringify(enc,null,2)+'\n';
@@ -412,47 +539,44 @@ $('btnSave').onclick = async () => {
       body:JSON.stringify({message:'update: '+currentId+' @ '+new Date().toISOString(),content:utf8ToB64(body),branch:'dev',sha:meta.sha})});
     const res=await put.json();
     if(!put.ok){ if(put.status===401||put.status===403){ token=''; updateMode(); } throw new Error(res.message||('提交失败 '+put.status)); }
-    $('saveMsg').textContent='✓ 已提交到 dev：'+res.commit.sha.slice(0,7);
-    $('saveMsg').className='px-4 py-2 text-xs border-t border-border-light dark:border-border-dark min-h-[32px] text-green-500';
+    $('saveMsg').textContent='已提交到 dev：'+res.commit.sha.slice(0,7);
+    $('saveMsg').style.color='#22c55e';
     renderPage(currentId);
     setTimeout(()=>$('editor').classList.add('hidden'),700);
   }catch(e){
     $('saveMsg').textContent='✗ '+e.message;
-    $('saveMsg').className='px-4 py-2 text-xs border-t border-border-light dark:border-border-dark min-h-[32px] text-red-500';
+    $('saveMsg').style.color='#e5484d';
   }finally{ $('btnSave').disabled=false; }
 };
 
-$('btnLock').onclick = async () => { await idbDel(IDB_KEY); await idbDel(IDB_TOKEN); location.reload(); };
-
-/* ── wrong-key notice ── */
-function copyText(t){
-  if(navigator.clipboard && window.isSecureContext){ return navigator.clipboard.writeText(t); }
-  return new Promise((res,rej)=>{
-    try{ const ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); res(); }
-    catch(e){ rej(e); }
-  });
-}
-$('garbageClose').onclick = async () => {
-  $('garbageModal').classList.add('hidden');
-  try{ await copyText('password'); showToast('密码已复制: password'); }
-  catch(e){ showToast('复制失败，请手动输入: password'); }
+/* ── lock / menu ── */
+$('btnLock').onclick = async () => {
+  clearTimeout(garbageTimer);
+  await idbDel(IDB_KEY); await idbDel(IDB_TOKEN); location.reload();
 };
-$('menu').onclick = () => $('sidebar').classList.toggle('hidden');
+function closeSidebar(){ $('sidebar').classList.remove('open'); $('scrim').classList.remove('show'); }
+$('menu').onclick = () => { $('sidebar').classList.toggle('open'); $('scrim').classList.toggle('show'); };
+$('scrim').onclick = closeSidebar;
 
 /* ── theme ── */
 (function(){
   const K='en-theme';
   const get=()=>localStorage.getItem(K)||'dark';
-  const apply=p=>{const d=p==='dark'||(p==='system'&&matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.classList.toggle('dark',d);document.querySelectorAll('[data-theme-icon]').forEach(e=>e.textContent=d?'light_mode':'dark_mode');};
+  const apply=p=>{
+    const d=p==='dark'||(p==='system'&&matchMedia('(prefers-color-scheme:dark)').matches);
+    document.documentElement.classList.toggle('dark',d);
+    const hl=$('hljsDark'); if(hl) hl.disabled=!d;
+  };
   apply(get());
   ['theme-toggle','theme-toggle-unlock'].forEach(id=>{const el=$(id); if(el) el.onclick=()=>{const n=get()==='dark'?'light':'dark';localStorage.setItem(K,n);apply(n);};});
 })();
 
-window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||'').replace(/^#\/?/,'')); });
+window.addEventListener('hashchange',()=>{ if(state){ renderPage((location.hash||'').replace(/^#\/?/,'')); closeSidebar(); } });
 
-/* preload params + try auto-unlock with key stored on this device */
+/* ── auto-unlock with cached key ── */
 (async function autoUnlock(){
   try{
+    if(!window.isSecureContext){ console.warn('非安全上下文，WebCrypto 不可用'); }
     if(!params) await loadParams();
     const k=await idbGet(IDB_KEY);
     if(!k) return;
@@ -460,9 +584,12 @@ window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||
     if(t) token=t;
     aesKey=k; remembered=true;
     const enc=await fetchNotes();
+    const a=performance.now();
     const text=await decryptToText(enc);
+    const decMs=performance.now()-a;
     const r=interpretPlaintext(text);
     state=r.state; garbageText=r.garbage;
+    setLastDecrypt(decMs);
     showApp(null);
     showToast('已用本机保存的密钥解锁');
     enterApp();
