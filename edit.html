@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>编辑 · Encrypted Notes</title>
+<script>
+(function(){try{var s=localStorage.getItem("en-theme")||"dark";var d=s==="dark"||(s==="system"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme:dark)").matches);document.documentElement.classList.toggle("dark",d);}catch(e){}})();
+</script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" onerror="this.remove()">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljsDark" disabled onerror="this.remove()">
+<script src="https://cdn.jsdelivr.net/npm/markdown-it@14/dist/markdown-it.min.js" onerror="window.__mdFail=1"></script>
+<script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11/highlight.min.js" onerror="window.__hljsFail=1"></script>
+<style>
+:root{--bg:#fff;--fg:#000;--muted:#6b6b6b;--line:#e5e5e5;--surface:#f4f4f4;--hover:#ebebeb;--code:#f6f6f6;--shadow:0 10px 40px rgba(0,0,0,.18)}
+html.dark{--bg:#000;--fg:#fff;--muted:#9a9a9a;--line:#2e2e2e;--surface:#141414;--hover:#1e1e1e;--code:#111;--shadow:0 10px 40px rgba(0,0,0,.6)}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.7;-webkit-tap-highlight-color:transparent}
+a{color:inherit}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+.hidden{display:none!important}
+svg{display:block}
+.icon-btn{width:38px;height:38px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;color:var(--muted);flex:0 0 auto;text-decoration:none;transition:background .15s,color .15s}
+.icon-btn:hover{background:var(--hover);color:var(--fg)}
+.icon-btn svg{width:20px;height:20px}
+.i-moon{display:none}
+html.dark .i-moon{display:block}
+html.dark .i-sun{display:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:9px;font-size:14px;font-weight:600;border:1px solid var(--line);background:var(--surface);color:var(--fg);white-space:nowrap}
+.btn:hover{background:var(--hover)}
+.btn-primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn-primary:hover{opacity:.85;background:var(--fg)}
+.btn:disabled{opacity:.5;cursor:default}
+
+/* header */
+.header{display:flex;align-items:center;gap:6px;height:50px;padding:0 10px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.brand{font-size:14px;font-weight:700;white-space:nowrap}
+.note-select{max-width:34vw;padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:13px;outline:none}
+.dirty-dot{width:8px;height:8px;border-radius:50%;background:#eab308;flex:0 0 auto}
+.spacer{flex:1 1 auto}
+
+/* toolbar */
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:2px;padding:6px 10px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.tbtn{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;color:var(--muted);transition:background .15s,color .15s}
+.tbtn:hover{background:var(--hover);color:var(--fg)}
+.tbtn svg{width:19px;height:19px}
+.tsep{width:1px;height:20px;background:var(--line);margin:0 6px}
+
+/* split */
+.split{flex:1 1 auto;display:flex;min-height:0}
+#ta{flex:1 1 50%;width:50%;min-width:0;resize:none;border:0;border-right:1px solid var(--line);outline:none;background:var(--surface);color:var(--fg);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px;line-height:1.75;padding:16px;tab-size:2}
+.preview{flex:1 1 50%;width:50%;min-width:0;overflow:auto;padding:16px 22px 60px}
+@media(max-width:767px){
+  .split{flex-direction:column}
+  #ta{width:100%;height:50%;border-right:0;border-bottom:1px solid var(--line)}
+  .preview{width:100%;height:50%}
+  .note-select{max-width:30vw}
+}
+
+/* status */
+.status{display:flex;align-items:center;gap:10px;height:34px;padding:0 12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);flex:0 0 auto}
+.status .msg{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ok{color:#22c55e}.warn{color:#eab308}.err{color:#e5484d}
+
+/* markdown preview */
+.preview h1{font-size:1.6em;margin:.6em 0 .5em;line-height:1.3}
+.preview h2{font-size:1.3em;margin:1.4em 0 .5em;padding-bottom:.25em;border-bottom:1px solid var(--line)}
+.preview h3{font-size:1.12em;margin:1.2em 0 .4em}
+.preview p{margin:.7em 0}
+.preview ul,.preview ol{padding-left:1.6em;margin:.7em 0}
+.preview li{margin:.25em 0}
+.preview a{text-decoration:underline;text-underline-offset:2px}
+.preview img{max-width:100%;height:auto;border-radius:8px}
+.preview hr{border:0;border-top:1px solid var(--line);margin:1.6em 0}
+.preview blockquote{border-left:3px solid var(--line);margin:1em 0;padding:.15em 0 .15em 1em;color:var(--muted)}
+.preview code{background:var(--code);border:1px solid var(--line);border-radius:5px;padding:.1em .38em;font-size:.88em;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.preview pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow:auto;margin:1em 0}
+.preview pre code{background:none;border:0;padding:0;font-size:.86em}
+.preview table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.92em;display:block;overflow-x:auto}
+.preview th,.preview td{border:1px solid var(--line);padding:.45em .7em;text-align:left}
+.preview thead th{background:var(--surface)}
+.preview u{text-decoration:underline;text-underline-offset:2px}
+.preview .placeholder{color:var(--muted)}
+
+/* gate / overlay */
+.center{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:24px}
+.gate-card{width:100%;max-width:340px;border:1px solid var(--line);border-radius:18px;padding:28px 24px;text-align:center}
+.gate-card svg.big{width:44px;height:44px;margin:0 auto}
+.pw-input{width:100%;margin-top:16px;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:14px;outline:none}
+.pw-input:focus{border-color:var(--fg)}
+html.dark .pw-input{background:#0d0d0d}
+.overlay{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:20px}
+.card{width:100%;max-width:400px;background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow)}
+.card h2{margin:0 0 10px;font-size:16px;display:flex;align-items:center;gap:8px}
+.card p{margin:.5em 0;font-size:13px;color:var(--muted)}
+.card code{background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:.1em .35em;font-size:.88em}
+#toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(12px);z-index:95;max-width:calc(100vw - 32px);padding:10px 18px;border-radius:999px;background:rgba(20,20,20,.92);color:#fff;font-size:13px;opacity:0;pointer-events:none;transition:opacity .22s,transform .22s}
+html.dark #toast{background:rgba(245,245,245,.94);color:#000}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<!-- Gate: no key on this device -->
+<div id="gate" class="center hidden">
+  <form id="gateForm" class="gate-card">
+    <svg class="big" viewBox="0 0 24 24" fill="currentColor"><path d="M12,17A2,2 0 0,0 14,15C14,13.89 13.1,13 12,13A2,2 0 0,0 10,15A2,2 0 0,0 12,17M18,8A2,2 0 0,1 20,10V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V10C4,8.89 4.9,8 6,8H7V6A5,5 0 0,1 12,1A5,5 0 0,1 17,6V8H18M12,3A3,3 0 0,0 9,6V8H15V6A3,3 0 0,0 12,3Z"/></svg>
+    <p style="font-size:14px;margin:12px 0 0">需要先解锁才能编辑</p>
+    <input id="gatePw" type="password" class="pw-input" placeholder="密码" autocomplete="current-password">
+    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:14px">解锁</button>
+    <div id="gateMsg" style="font-size:12px;color:#e5484d;min-height:16px;margin-top:8px"></div>
+    <p style="font-size:12px;margin-top:12px"><a href="./">← 返回加密笔记</a></p>
+  </form>
+</div>
+
+<!-- Editor app -->
+<div id="app" class="hidden" style="display:flex;flex-direction:column;height:100vh">
+  <header class="header">
+    <a class="icon-btn" href="./" title="返回笔记" aria-label="返回笔记"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z"/></svg></a>
+    <span class="brand">编辑</span>
+    <select id="noteSelect" class="note-select" title="选择笔记"></select>
+    <span id="dirtyDot" class="dirty-dot hidden" title="有未保存的修改"></span>
+    <span class="spacer"></span>
+    <button id="btnSave" class="btn btn-primary" title="保存到 dev（Ctrl/Cmd+S）"><svg viewBox="0 0 24 24" fill="currentColor" style="width:17px;height:17px"><path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z"/></svg><span class="save-label">保存</span></button>
+    <button id="theme-toggle" class="icon-btn" title="主题" aria-label="主题"><svg class="i-sun" viewBox="0 -960 960 960" fill="currentColor"><path d="M480-360q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35Zm0 80q-83 0-141.5-58.5T280-480q0-83 58.5-141.5T480-680q83 0 141.5 58.5T680-480q0 83-58.5 141.5T480-280ZM80-440q-17 0-28.5-11.5T40-480q0-17 11.5-28.5T80-520h80q17 0 28.5 11.5T200-480q0 17-11.5 28.5T160-440H80Zm720 0q-17 0-28.5-11.5T760-480q0-17 11.5-28.5T800-520h80q17 0 28.5 11.5T920-480q0 17-11.5 28.5T880-440h-80ZM480-760q-17 0-28.5-11.5T440-800v-80q0-17 11.5-28.5T480-920q17 0 28.5 11.5T520-880v80q0 17-11.5 28.5T480-760Zm0 720q-17 0-28.5-11.5T440-80v-80q0-17 11.5-28.5T480-200q17 0 28.5 11.5T520-160v80q0 17-11.5 28.5T480-40ZM226-678l-43-42q-12-11-11.5-28t11.5-29q12-12 29-12t28 12l42 43q11 12 11 28t-11 28q-11 12-27.5 11.5T226-678Zm494 495-42-43q-11-12-11-28.5t11-27.5q11-12 27.5-11.5T734-282l43 42q12 11 11.5 28T777-183q-12 12-29 12t-28-12Zm-42-495q-12-11-11.5-27.5T678-734l42-43q11-12 28-11.5t29 11.5q12 12 12 29t-12 28l-43 42q-12 11-28 11t-28-11ZM183-183q-12-12-12-29t12-28l43-42q12-11 28.5-11t27.5 11q12 11 11.5 27.5T282-226l-42 43q-11 12-28 11.5T183-183Zm297-297Z"/></svg><svg class="i-moon" viewBox="0 -960 960 960" fill="currentColor"><path d="M480-120q-151 0-255.5-104.5T120-480q0-138 90-239.5T440-838q13-2 23 3.5t16 14.5q6 9 6.5 21t-7.5 23q-17 26-25.5 55t-8.5 61q0 90 63 153t153 63q31 0 61.5-9t54.5-25q11-7 22.5-6.5T819-479q10 5 15.5 15t3.5 24q-14 138-117.5 229T480-120Zm0-80q88 0 158-48.5T740-375q-20 5-40 8t-40 3q-123 0-209.5-86.5T364-660q0-20 3-40t8-40q-78 32-126.5 102T200-480q0 116 82 198t198 82Zm-10-270Z"/></svg></button>
+    <a class="icon-btn" href="https://down2.top/encrypted_params/about.html" target="_blank" rel="noopener" title="关于加密技术细节" aria-label="帮助"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10,19H13V22H10V19M12,2C17.35,2.22 19.68,7.62 16.5,11.67C15.67,12.67 14.33,13.33 13.67,14.17C13,15 13,16 13,17H10C10,15.33 10,13.92 10.67,12.92C11.33,11.92 12.67,11.33 13.5,10.67C15.92,8.43 15.32,5.26 12,5A3,3 0 0,0 9,8H6A6,6 0 0,1 12,2Z"/></svg></a>
+  </header>
+
+  <div class="toolbar" id="toolbar">
+    <button class="tbtn" data-act="bold" title="加粗"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.5,15.5H10V12.5H13.5A1.5,1.5 0 0,1 15,14A1.5,1.5 0 0,1 13.5,15.5M10,6.5H13A1.5,1.5 0 0,1 14.5,8A1.5,1.5 0 0,1 13,9.5H10M15.6,10.79C16.57,10.11 17.25,9 17.25,8C17.25,5.74 15.5,4 13.25,4H7V18H14.04C16.14,18 17.75,16.3 17.75,14.21C17.75,12.69 16.89,11.39 15.6,10.79Z"/></svg></button>
+    <button class="tbtn" data-act="italic" title="斜体"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10,4V7H12.21L8.79,15H6V18H14V15H11.79L15.21,7H18V4H10Z"/></svg></button>
+    <button class="tbtn" data-act="underline" title="下划线（++文字++）"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5,21H19V19H5V21M12,17A6,6 0 0,0 18,11V3H15.5V11A3.5,3.5 0 0,1 12,14.5A3.5,3.5 0 0,1 8.5,11V3H6V11A6,6 0 0,0 12,17Z"/></svg></button>
+    <button class="tbtn" data-act="strike" title="删除线"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3,14H21V12H3M5,4V7H10V10H14V7H19V4M10,19H14V16H10V19Z"/></svg></button>
+    <span class="tsep"></span>
+    <button class="tbtn" data-act="code" title="代码行"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14.6,16.6L19.2,12L14.6,7.4L16,6L22,12L16,18L14.6,16.6M9.4,16.6L4.8,12L9.4,7.4L8,6L2,12L8,18L9.4,16.6Z"/></svg></button>
+    <button class="tbtn" data-act="codeblock" title="代码块"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8,3A2,2 0 0,0 6,5V9A2,2 0 0,1 4,11H3V13H4A2,2 0 0,1 6,15V19A2,2 0 0,0 8,21H10V19H8V14A2,2 0 0,0 6,12A2,2 0 0,0 8,10V5H10V3M16,3A2,2 0 0,1 18,5V9A2,2 0 0,0 20,11H21V13H20A2,2 0 0,0 18,15V19A2,2 0 0,1 16,21H14V19H16V14A2,2 0 0,1 18,12A2,2 0 0,1 16,10V5H14V3H16Z"/></svg></button>
+    <span class="tsep"></span>
+    <button class="tbtn" data-act="ul" title="项目列表"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7,5H21V7H7V5M7,13V11H21V13H7M4,4.5A1.5,1.5 0 0,1 5.5,6A1.5,1.5 0 0,1 4,7.5A1.5,1.5 0 0,1 2.5,6A1.5,1.5 0 0,1 4,4.5M4,10.5A1.5,1.5 0 0,1 5.5,12A1.5,1.5 0 0,1 4,13.5A1.5,1.5 0 0,1 2.5,12A1.5,1.5 0 0,1 4,10.5M7,19V17H21V19H7M4,16.5A1.5,1.5 0 0,1 5.5,18A1.5,1.5 0 0,1 4,19.5A1.5,1.5 0 0,1 2.5,18A1.5,1.5 0 0,1 4,16.5Z"/></svg></button>
+    <button class="tbtn" data-act="ol" title="有序列表"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7,13V11H21V13H7M7,19V17H21V19H7M7,7V5H21V7H7M3,8V5H2V4H4V8H3M2,17V16H5V20H2V19H4V18.5H3V17.5H4V17H2M4.25,10A0.75,0.75 0 0,1 5,10.75C5,10.95 4.92,11.14 4.79,11.27L3.12,13H5V14H2V13.08L4,11H2V10H4.25Z"/></svg></button>
+    <button class="tbtn" data-act="quote" title="引用"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M14,17H17L19,13V7H13V13H16M6,17H9L11,13V7H5V13H8L6,17Z"/></svg></button>
+    <button class="tbtn" data-act="h2" title="二级标题"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3,4H5V10H9V4H11V18H9V12H5V18H3V4M21,18H15A2,2 0 0,1 13,16C13,15.47 13.2,15 13.54,14.64L18.41,9.41C18.78,9.05 19,8.55 19,8A2,2 0 0,0 17,6A2,2 0 0,0 15,8H13A4,4 0 0,1 17,4A4,4 0 0,1 21,8C21,9.1 20.55,10.1 19.83,10.83L15,16H21V18Z"/></svg></button>
+    <button class="tbtn" data-act="hr" title="分隔线"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19,13H5V11H19V13Z"/></svg></button>
+    <span class="tsep"></span>
+    <button class="tbtn" data-act="link" title="链接"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59,13.41C11,13.8 11,14.44 10.59,14.83C10.2,15.22 9.56,15.22 9.17,14.83C7.22,12.88 7.22,9.71 9.17,7.76V7.76L12.71,4.22C14.66,2.27 17.83,2.27 19.78,4.22C21.73,6.17 21.73,9.34 19.78,11.29L18.29,12.78C18.3,11.96 18.17,11.14 17.89,10.36L18.36,9.88C19.54,8.71 19.54,6.81 18.36,5.64C17.19,4.46 15.29,4.46 14.12,5.64L10.59,9.17C9.41,10.34 9.41,12.24 10.59,13.41M13.41,9.17C13.8,8.78 14.44,8.78 14.83,9.17C16.78,11.12 16.78,14.29 14.83,16.24V16.24L11.29,19.78C9.34,21.73 6.17,21.73 4.22,19.78C2.27,17.83 2.27,14.66 4.22,12.71L5.71,11.22C5.7,12.04 5.83,12.86 6.11,13.65L5.64,14.12C4.46,15.29 4.46,17.19 5.64,18.36C6.81,19.54 8.71,19.54 9.88,18.36L13.41,14.83C14.59,13.66 14.59,11.76 13.41,10.59C13,10.2 13,9.56 13.41,9.17Z"/></svg></button>
+    <button class="tbtn" data-act="image" title="图片"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8.5,13.5L11,16.5L14.5,12L19,18H5M21,19V5C21,3.89 20.1,3 19,3H5A2,2 0 0,0 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19Z"/></svg></button>
+  </div>
+
+  <div class="split">
+    <textarea id="ta" spellcheck="false" placeholder="在此输入 Markdown…"></textarea>
+    <div class="preview" id="preview"></div>
+  </div>
+
+  <div class="status"><span class="msg" id="statusMsg"></span><span id="stats"></span></div>
+</div>
+
+<!-- Token prompt -->
+<div id="tokenModal" class="hidden overlay">
+  <form id="tokenForm" class="card">
+    <h2><svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px"><path d="M7 14C5.9 14 5 13.1 5 12S5.9 10 7 10 9 10.9 9 12 8.1 14 7 14M12.6 10C11.8 7.7 9.6 6 7 6C3.7 6 1 8.7 1 12S3.7 18 7 18C9.6 18 11.8 16.3 12.6 14H16V18H20V14H23V10H12.6Z"/></svg> 需要 GitHub Token</h2>
+    <p>仅用于把加密笔记提交到 <code>encrypted_notes</code> 的 <code>dev</code> 分支，只存本机。</p>
+    <input id="tk" type="password" class="pw-input" style="text-align:left;margin-top:6px" placeholder="github_pat_..." autocomplete="off">
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button type="button" id="tkCancel" class="btn" style="flex:1">取消</button>
+      <button type="submit" class="btn btn-primary" style="flex:1">确认</button>
+    </div>
+  </form>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script type="module">
+const PARAMS_URL = 'https://raw.githubusercontent.com/teecatt/encrypted_params/main/params.json';
+const NOTES_RAW  = 'https://raw.githubusercontent.com/teecatt/encrypted_notes/dev/notes.enc.json';
+const API_URL    = 'https://api.github.com/repos/teecatt/encrypted_notes/contents/notes.enc.json';
+const ARGON2_URL = new URL('vendor/argon2-bundled.min.js', location.href).href;
+const $ = id => document.getElementById(id);
+let params=null, aesKey=null, state=null, token='', currentId=null, dirty=false;
+
+const bytesToB64 = b => { let s=''; b.forEach(x=>s+=String.fromCharCode(x)); return btoa(s); };
+const b64ToBytes = s => { const bin=atob(s); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; };
+const hexToBytes = h => { const a=new Uint8Array(h.length/2); for(let i=0;i<a.length;i++)a[i]=parseInt(h.substr(i*2,2),16); return a; };
+const utf8ToB64  = s => bytesToB64(new TextEncoder().encode(s));
+function escapeHtml(s){ return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+/* markdown-it + ++underline++ rule */
+function underlinePlugin(md){
+  md.inline.ruler.after('emphasis','underline', function(state, silent){
+    const start=state.pos, src=state.src;
+    if(src.charCodeAt(start)!==0x2B || src.charCodeAt(start+1)!==0x2B) return false;
+    const end=src.indexOf('++', start+2);
+    if(end<0 || end===start+2) return false;
+    if(!silent){
+      state.push('u_open','u',1);
+      const t=state.push('text','',0); t.content=src.slice(start+2,end);
+      state.push('u_close','u',-1);
+    }
+    state.pos=end+2;
+    return true;
+  });
+}
+let md=null;
+if(window.markdownit){
+  md = window.markdownit({html:false, linkify:true, typographer:true,
+    highlight(str, lang){
+      if(window.hljs && lang && hljs.getLanguage(lang)){
+        try{ return '<pre class="hljs"><code>'+hljs.highlight(str,{language:lang,ignoreIllegals:true}).value+'</code></pre>'; }catch(e){}
+      }
+      return '<pre class="hljs"><code>'+escapeHtml(str)+'</code></pre>';
+    }});
+  md.use(underlinePlugin);
+}
+function renderMd(src){
+  if(md){ try{ return md.render(src); }catch(e){} }
+  return '<pre style="white-space:pre-wrap">'+escapeHtml(src)+'</pre>';
+}
+
+/* crypto */
+async function loadParams(){ const r=await fetch(PARAMS_URL,{cache:'no-store'}); if(!r.ok) throw new Error('params 加载失败 '+r.status); params=await r.json(); }
+let nobleArgon2id=null;
+async function deriveKeyNoble(pw){
+  if(!nobleArgon2id){ const mod=await import('https://cdn.jsdelivr.net/npm/@noble/hashes@2.4.0/argon2.js'); nobleArgon2id=mod.argon2id; }
+  const raw=nobleArgon2id(new TextEncoder().encode(pw), hexToBytes(params.salt), {t:params.time,m:params.memKiB,p:params.parallelism,dkLen:params.hashLen});
+  return await crypto.subtle.importKey('raw', raw, {name:'AES-CTR'}, false, ['encrypt','decrypt']);
+}
+function deriveKeyWasm(pw){
+  return new Promise((resolve,reject)=>{
+    let w;
+    try{
+      const code="importScripts("+JSON.stringify(ARGON2_URL)+");self.onmessage=async function(e){var d=e.data;try{var salt=new Uint8Array(d.saltHex.match(/../g).map(function(h){return parseInt(h,16)}));var res=await argon2.hash({pass:d.pass,salt:salt,time:d.t,mem:d.m,parallelism:d.p,hashLen:d.dkLen,type:2});var ck=await crypto.subtle.importKey('raw',res.hash,{name:'AES-CTR'},false,['encrypt','decrypt']);self.postMessage({ok:true,key:ck});}catch(err){self.postMessage({ok:false,error:String(err&&err.message||err)});}};";
+      w=new Worker(URL.createObjectURL(new Blob([code],{type:'application/javascript'})));
+    }catch(err){ return reject(err); }
+    w.onmessage=(e)=>{w.terminate();e.data.ok?resolve(e.data.key):reject(new Error(e.data.error));};
+    w.onerror=(e)=>{w.terminate();reject(new Error(e.message||'WASM worker error'));};
+    w.postMessage({pass:pw,saltHex:params.salt,t:params.time,m:params.memKiB,p:params.parallelism,dkLen:params.hashLen});
+  });
+}
+async function deriveKey(pw){ try{ return await deriveKeyWasm(pw); }catch(e){ console.warn('WASM 回退 JS：'+e.message); return await deriveKeyNoble(pw); } }
+const IDB_NAME='en-keys',IDB_STORE='keys',IDB_KEY='aes',IDB_TOKEN='token';
+function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=()=>r.result.createObjectStore(IDB_STORE); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function idbGet(k){ try{ const db=await idbOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }catch(e){ return null; } }
+async function idbPut(k,v){ const db=await idbOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(IDB_STORE,'readwrite').objectStore(IDB_STORE).put(v,k); q.onsuccess=()=>res(); q.onerror=()=>rej(q.error); }); }
+async function decryptToText(enc){
+  const pt=new Uint8Array(await crypto.subtle.decrypt({name:'AES-CTR',counter:b64ToBytes(enc.iv),length:128}, aesKey, b64ToBytes(enc.ct)));
+  return new TextDecoder('utf-8',{fatal:false}).decode(pt);
+}
+function interpretPlaintext(text){
+  if(text.startsWith(params.magic)){ try{ return {state:JSON.parse(text.slice(params.magic.length)),garbage:null}; }catch(e){ return {state:null,garbage:text}; } }
+  return {state:null,garbage:text};
+}
+async function encryptNotes(obj){
+  const data=new TextEncoder().encode(params.magic+JSON.stringify(obj));
+  const iv=crypto.getRandomValues(new Uint8Array(16));
+  const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-CTR',counter:iv,length:128}, aesKey, data));
+  return {v:1,alg:'AES-CTR-256',iv:bytesToB64(iv),ct:bytesToB64(ct)};
+}
+async function fetchNotes(){ const r=await fetch(NOTES_RAW+'?t='+Date.now(),{cache:'no-store'}); if(!r.ok) throw new Error('笔记加载失败 '+r.status); return await r.json(); }
+
+/* toast / status */
+let toastTimer=null;
+function showToast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),4000); }
+function setStatus(msg, cls){ const s=$('statusMsg'); s.textContent=msg||''; s.className='msg '+(cls||''); }
+
+/* flatten nav */
+function flatNav(items, depth, out){
+  for(const it of items){ out.push({id:it.id,title:it.title,depth}); if(it.children) flatNav(it.children, depth+1, out); }
+  return out;
+}
+function buildNoteList(){
+  const sel=$('noteSelect'); sel.innerHTML='';
+  for(const it of flatNav(state.nav||[],0,[])){
+    const o=document.createElement('option'); o.value=it.id;
+    o.textContent='\u00A0\u00A0'.repeat(it.depth)+(it.depth?'└ ':'')+it.title;
+    sel.appendChild(o);
+  }
+}
+
+/* preview + dirty */
+let renderTimer=null;
+function onInput(){
+  markDirty(true);
+  clearTimeout(renderTimer);
+  renderTimer=setTimeout(renderPreview, 120);
+  updateStats();
+}
+function renderPreview(){ $('preview').innerHTML = renderMd($('ta').value) || '<p class="placeholder">（空）</p>'; }
+function updateStats(){ $('stats').textContent = $('ta').value.length+' 字符'; }
+function markDirty(v){ dirty=v; $('dirtyDot').classList.toggle('hidden', !v); }
+
+/* note selection */
+function selectNote(id, skipConfirm){
+  if(!state.pages[id]) id=state.nav[0].id;
+  if(!skipConfirm && dirty && currentId && !confirm('当前笔记有未保存的修改，仍要切换吗？')){ $('noteSelect').value=currentId; return; }
+  currentId=id;
+  $('noteSelect').value=id;
+  $('ta').value=state.pages[id]||'';
+  markDirty(false);
+  renderPreview(); updateStats();
+  history.replaceState(null,'','#'+id);
+}
+$('noteSelect').onchange = () => selectNote($('noteSelect').value);
+
+/* toolbar */
+function surround(before, after){
+  const ta=$('ta'), s=ta.selectionStart, e=ta.selectionEnd, sel=ta.value.slice(s,e);
+  ta.setRangeText(before+sel+after, s, e, 'end');
+  const inner=s+before.length;
+  ta.setSelectionRange(inner, inner+sel.length);
+  ta.focus(); onInput();
+}
+function linePrefix(prefix){
+  const ta=$('ta'), s=ta.selectionStart, e=ta.selectionEnd, val=ta.value;
+  const start=val.lastIndexOf('\n', s-1)+1;
+  let end=val.indexOf('\n', e); if(end<0) end=val.length;
+  const out=val.slice(start,end).split('\n').map(l=>prefix+l).join('\n');
+  ta.setRangeText(out, start, end, 'end');
+  ta.setSelectionRange(start, start+out.length);
+  ta.focus(); onInput();
+}
+function insertLink(img){
+  const ta=$('ta'), s=ta.selectionStart, e=ta.selectionEnd;
+  const sel=ta.value.slice(s,e)||(img?'alt':'text');
+  const text=(img?'!':'')+'['+sel+'](url)';
+  ta.setRangeText(text, s, e, 'end');
+  const at=s+text.lastIndexOf('(url)')+1;
+  ta.setSelectionRange(at, at+3);
+  ta.focus(); onInput();
+}
+const acts={
+  bold:()=>surround('**','**'), italic:()=>surround('*','*'), underline:()=>surround('++','++'),
+  strike:()=>surround('~~','~~'), code:()=>surround('`','`'),
+  codeblock:()=>surround('```\n','\n```'), ul:()=>linePrefix('- '), ol:()=>linePrefix('1. '),
+  quote:()=>linePrefix('> '), h2:()=>linePrefix('## '),
+  hr:()=>{ const ta=$('ta'); ta.setRangeText('\n---\n', ta.selectionStart, ta.selectionEnd, 'end'); ta.focus(); onInput(); },
+  link:()=>insertLink(false), image:()=>insertLink(true)
+};
+$('toolbar').addEventListener('click', e=>{
+  const b=e.target.closest('[data-act]'); if(!b) return;
+  const fn=acts[b.dataset.act]; if(fn) fn();
+});
+
+/* save */
+let tokenResolver=null;
+function askToken(){
+  return new Promise(resolve=>{ tokenResolver=resolve; $('tk').value=''; $('tokenModal').classList.remove('hidden'); setTimeout(()=>$('tk').focus(),50); });
+}
+$('tokenForm').onsubmit=(e)=>{ e.preventDefault(); const t=$('tk').value.trim(); $('tokenModal').classList.add('hidden'); if(t) idbPut(IDB_TOKEN,t).catch(()=>{}); if(tokenResolver){ tokenResolver(t); tokenResolver=null; } };
+$('tkCancel').onclick=()=>{ $('tokenModal').classList.add('hidden'); if(tokenResolver){ tokenResolver(''); tokenResolver=null; } };
+
+async function save(){
+  if(!state){ return; }
+  if(!token){ token=await askToken(); if(!token) return; }
+  state.pages[currentId]=$('ta').value;
+  $('btnSave').disabled=true;
+  setStatus('加密并提交中…','warn');
+  try{
+    const enc=await encryptNotes(state);
+    const body=JSON.stringify(enc,null,2)+'\n';
+    const auth={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'};
+    const g=await fetch(API_URL+'?ref=dev&t='+Date.now(),{headers:auth});
+    if(!g.ok){ if(g.status===401||g.status===403){ token=''; } throw new Error('读取文件信息失败 '+g.status+'（Token 无效或无权限）'); }
+    const meta=await g.json();
+    const put=await fetch(API_URL,{method:'PUT',headers:{...auth,'Content-Type':'application/json'},
+      body:JSON.stringify({message:'update: '+currentId+' @ '+new Date().toISOString(),content:utf8ToB64(body),branch:'dev',sha:meta.sha})});
+    const res=await put.json();
+    if(!put.ok){ if(put.status===401||put.status===403){ token=''; } throw new Error(res.message||('提交失败 '+put.status)); }
+    markDirty(false);
+    setStatus('已提交到 dev：'+res.commit.sha.slice(0,7),'ok');
+    showToast('已保存到 dev');
+  }catch(e){
+    setStatus('✗ '+e.message,'err');
+  }finally{ $('btnSave').disabled=false; }
+}
+$('btnSave').onclick = save;
+document.addEventListener('keydown', e=>{
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){ e.preventDefault(); save(); }
+});
+
+/* theme */
+(function(){
+  const K='en-theme';
+  const get=()=>localStorage.getItem(K)||'dark';
+  const apply=p=>{ const d=p==='dark'||(p==='system'&&matchMedia('(prefers-color-scheme:dark)').matches); document.documentElement.classList.toggle('dark',d); const hl=$('hljsDark'); if(hl) hl.disabled=!d; };
+  apply(get());
+  $('theme-toggle').onclick=()=>{ const n=get()==='dark'?'light':'dark'; localStorage.setItem(K,n); apply(n); };
+})();
+
+window.addEventListener('beforeunload', e=>{ if(dirty){ e.preventDefault(); e.returnValue=''; } });
+window.addEventListener('hashchange', ()=>{ const id=(location.hash||'').replace(/^#\/?/,''); if(state && id && id!==currentId) selectNote(id); });
+
+/* gate unlock */
+$('gateForm').onsubmit = async (e)=>{
+  e.preventDefault();
+  const pw=$('gatePw').value; if(!pw) return;
+  const btn=e.target.querySelector('button[type=submit]'); btn.disabled=true; $('gateMsg').textContent='正在解密…';
+  try{
+    if(!params) await loadParams();
+    aesKey=await deriveKey(pw);
+    const enc=await fetchNotes();
+    const text=await decryptToText(enc);
+    const r=interpretPlaintext(text);
+    if(!r.state){ $('gateMsg').textContent='密码错误或数据损坏'; btn.disabled=false; return; }
+    try{ await idbPut(IDB_KEY, aesKey); }catch(err){}
+    state=r.state;
+    const t=await idbGet(IDB_TOKEN); if(t) token=t;
+    showEditor();
+  }catch(err){ $('gateMsg').textContent='失败：'+err.message; btn.disabled=false; }
+};
+
+function showEditor(){
+  $('gate').classList.add('hidden');
+  $('app').classList.remove('hidden');
+  buildNoteList();
+  const id=(location.hash||'').replace(/^#\/?/,'') || state.nav[0].id;
+  selectNote(id, true);
+}
+
+/* boot */
+(async function(){
+  try{
+    if(!params) await loadParams();
+    const k=await idbGet(IDB_KEY);
+    if(!k){ $('gate').classList.remove('hidden'); return; }
+    aesKey=k;
+    const t=await idbGet(IDB_TOKEN); if(t) token=t;
+    const enc=await fetchNotes();
+    const text=await decryptToText(enc);
+    const r=interpretPlaintext(text);
+    if(!r.state){ $('gate').classList.remove('hidden'); return; }
+    state=r.state;
+    showEditor();
+  }catch(e){ console.warn(e); $('gate').classList.remove('hidden'); }
+})();
+</script>
+</body>
+</html>
