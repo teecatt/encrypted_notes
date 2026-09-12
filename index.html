@@ -586,7 +586,7 @@ window.addEventListener('hashchange',()=>{ if(state){ renderPage((location.hash|
     state=r.state; garbageText=r.garbage;
     setLastDecrypt(dt);
     showApp(null);
-    showToast('已自动解密');
+    showToast('已自动解密 · '+fmtTime(dt));
     enterApp();
   }catch(e){ console.warn('自动解锁失败', e); }
 })();
