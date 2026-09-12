@@ -287,14 +287,24 @@ async function loadAll(){
   let list;
   if(man && Array.isArray(man.notes)){ list=man.notes.map(p=>({path:p, id:S.idFromPath(p)})); }
   else { list=await S.remoteNotes(token, true); }
-  const notes={};
+  const notes={}; let garbage=null;
   for(const e of list){
-    try{ const p=S.parseNote(await S.decryptText((await S.fetchNote(e.path)).trim())); if(!p) continue; notes[e.id]={id:e.id,title:p.title,content:p.content,order:p.order,ancestors:S.ancestorsFromPath(e.path)}; }catch(err){ console.warn('跳过',e.path,err); }
+    try{
+      const dec=await S.decryptText((await S.fetchNote(e.path)).trim());
+      const p=S.parseNote(dec);
+      if(!p){ if(garbage===null) garbage=dec; continue; }
+      notes[e.id]={id:e.id,title:p.title,content:p.content,order:p.order,ancestors:S.ancestorsFromPath(e.path)};
+    }catch(err){ console.warn('跳过',e.path,err); }
   }
   state={nav:S.buildNav(notes),pages:{}};
   Object.values(notes).forEach(n=>{ state.pages[n.id]=n.content||''; });
   await S.cachePut('state',state);
-  return performance.now()-t0;
+  return {ms:performance.now()-t0, garbage};
+}
+function showGarbage(text){
+  $('pageTitle').textContent='';
+  $('content').innerHTML='<pre class="garbage">'+escapeHtml(text)+'</pre>';
+  const nav=$('nav'); if(nav) nav.innerHTML='';
 }
 
 /* garbage modal */
@@ -316,18 +326,13 @@ $('unlockForm').onsubmit=async(e)=>{
     await S.loadParams();
     const key=await S.deriveKey(pw);
     $('unlockStatus').textContent='Fetch notes…';
-    const remote=await S.remoteNotes(token, true);
-    if(remote.length){
-      const p=S.parseNote(await S.decryptText((await S.fetchNote(remote[0].path)).trim()));
-      if(!p){ $('arrowIcon').classList.remove('hidden'); $('spinIcon').classList.add('hidden'); $('unlockStatus').classList.add('hidden'); $('pw').disabled=false; $('btnUnlock').disabled=false; $('unlockMsg').textContent=''; scheduleGarbage(); return; }
-    }
     try{ await idbPut(IDB_KEY,key); }catch(err){}
     { const t=await idbGet(IDB_TOKEN); token=t||''; }
-    const dt=await loadAll();
+    const res=await loadAll();
     $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
-    setLastDecrypt(performance.now()-t0);
-    showToast('已解密');
-    enterApp();
+    setLastDecrypt(res.ms);
+    if(res.garbage!==null && !Object.keys(state.pages||{}).length){ showGarbage(res.garbage); scheduleGarbage(); }
+    else { showToast('已解密'); enterApp(); }
   }catch(err){
     $('arrowIcon').classList.remove('hidden'); $('spinIcon').classList.add('hidden'); $('unlockStatus').classList.add('hidden');
     $('pw').disabled=false; $('btnUnlock').disabled=false;
@@ -367,9 +372,11 @@ window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||
       setLastDecrypt(performance.now()-t0); showToast('已自动解密 · '+fmtTime(performance.now()-t0)); enterApp();
       loadAll().then(()=>{ enterApp(); }).catch(()=>{});
     } else {
-      await loadAll();
+      const res=await loadAll();
       $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
-      setLastDecrypt(performance.now()-t0); showToast('已自动解密 · '+fmtTime(performance.now()-t0)); enterApp();
+      setLastDecrypt(res.ms);
+      if(res.garbage!==null && !Object.keys(state.pages||{}).length){ showGarbage(res.garbage); scheduleGarbage(); }
+      else { showToast('已自动解密 · '+fmtTime(res.ms)); enterApp(); }
     }
   }catch(e){ console.warn('自动解锁失败',e); }
 })();
