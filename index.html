@@ -133,7 +133,7 @@ html.dark .pw-input{background:#0d0d0d}
 }
 
 /* ── toast (Android-style, bottom-center, non-blocking) ── */
-#toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(12px);z-index:95;max-width:calc(100vw - 32px);padding:10px 18px;border-radius:999px;background:rgba(20,20,20,.92);color:#fff;font-size:13px;line-height:1.4;text-align:center;opacity:0;pointer-events:none;transition:opacity .22s,transform .22s}
+#toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(12px);z-index:95;max-width:calc(100vw - 32px);padding:10px 18px;border-radius:16px;background:rgba(20,20,20,.92);color:#fff;font-size:13px;line-height:1.5;text-align:center;white-space:pre-line;opacity:0;pointer-events:none;transition:opacity .22s,transform .22s}
 html.dark #toast{background:rgba(245,245,245,.94);color:#000}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
@@ -250,7 +250,7 @@ async function idbDel(k){ try{ const db=await idbOpen(); await new Promise((res,
 
 /* toast */
 let toastTimer=null;
-function showToast(msg){ const t=$('toast'); if(!t) return; t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),4000); }
+function showToast(msg,dur){ const t=$('toast'); if(!t) return; t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),dur||4000); }
 
 /* nav / page */
 function renderNav(){
@@ -281,36 +281,54 @@ function enterApp(){
   if(id) renderPage(id); else $('content').innerHTML='<p style="color:var(--muted)">（还没有笔记，去 <a href="edit.html">编辑页</a> 新建）</p>';
 }
 
-/* load all notes from remote */
+/* load all notes from remote, timing each stage */
 async function loadAll(){
   const t0=performance.now();
+  const tMan0=performance.now();
   const man=await S.readManifest();
   let list;
   if(man && Array.isArray(man.notes)){ list=man.notes.map(p=>({path:p})); }
   else { list=(await S.remoteNotes(token, true)).map(e=>({path:e.path})); }
+  const tMan=performance.now()-tMan0;
   garbageIds=new Set();
   const notes={}; let garbage=null, parsed=0; const orderCounter={};
+  let tName=0, tFetch=0, tDec=0;
   for(const e of list){
+    const tn=performance.now();
     const segs=S.segmentsFromPath(e.path);
     const chain=[];
     for(const seg of segs){ chain.push((await S.decryptName(seg))||{id:seg,title:seg}); }
+    tName+=performance.now()-tn;
     if(!chain.length) continue;
     const self=chain[chain.length-1];
     const anc=chain.slice(0,-1).map(c=>c.id);
     const parent=anc.length?anc[anc.length-1]:'';
     const order=(orderCounter[parent]=(orderCounter[parent]||0)+1)-1;
     try{
-      const dec=await S.decryptText((await S.fetchNote(e.path)).trim());
+      const tf=performance.now();
+      const raw=(await S.fetchNote(e.path)).trim();
+      tFetch+=performance.now()-tf;
+      const td=performance.now();
+      const dec=await S.decryptText(raw);
       const p=S.parseNote(dec);
+      tDec+=performance.now()-td;
       if(!p){ if(garbage===null) garbage=dec; garbageIds.add(self.id); notes[self.id]={id:self.id,title:self.title,content:dec,order,ancestors:anc}; continue; }
       parsed++;
       notes[self.id]={id:self.id,title:self.title,content:p.content,order:p.order,ancestors:anc};
     }catch(err){ console.warn('跳过',e.path,err); }
   }
+  const tb=performance.now();
   state={nav:S.buildNav(notes),pages:{}};
   Object.values(notes).forEach(n=>{ state.pages[n.id]=n.content||''; });
+  const tBuild=performance.now()-tb;
   if(parsed>0) await S.cachePut('state',state);
-  return {ms:performance.now()-t0, garbage, parsed};
+  const stages={manifest:tMan,names:tName,fetch:tFetch,content:tDec,build:tBuild};
+  return {ms:performance.now()-t0, garbage, parsed, stages};
+}
+const STAGE_LABEL={params:'参数',key:'密钥',token:'令牌',cache:'缓存',manifest:'列表',names:'名称',fetch:'下载',content:'内容',build:'建树',render:'渲染'};
+function fmtStages(stages){ return Object.entries(stages).filter(([k,v])=>v!==undefined).map(([k,v])=>STAGE_LABEL[k]+' '+fmtTime(v)).join(' · '); }
+function decryptToast(prefix, total, stages){
+  return prefix+' · 总 '+fmtTime(total)+'\n'+fmtStages(stages);
 }
 function showGarbage(text){
   $('pageTitle').textContent='';
@@ -334,17 +352,27 @@ $('unlockForm').onsubmit=async(e)=>{
   $('unlockStatus').classList.remove('hidden'); $('unlockStatus').textContent='Generate key…';
   const t0=performance.now();
   try{
+    const tp=performance.now();
     await S.loadParams();
+    const tParams=performance.now()-tp;
+    const tk=performance.now();
     const key=await S.deriveKey(pw);
+    const tKey=performance.now()-tk;
     $('unlockStatus').textContent='Fetch notes…';
     try{ await idbPut(IDB_KEY,key); }catch(err){}
+    const tt=performance.now();
     { const t=await idbGet(IDB_TOKEN); token=t||''; }
+    const tToken=performance.now()-tt;
     const res=await loadAll();
     $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
     setLastDecrypt(res.ms);
     garbageMode=(res.parsed===0 && res.garbage!==null);
-    if(garbageMode) scheduleGarbage(); else showToast('已解密 · '+fmtTime(res.ms));
+    const tr=performance.now();
     enterApp();
+    const tRender=performance.now()-tr;
+    const stages={params:tParams,key:tKey,token:tToken,...res.stages,render:tRender};
+    console.log('[decrypt] total',performance.now()-t0,stages);
+    if(garbageMode) scheduleGarbage(); else showToast(decryptToast('已解密',res.ms,stages),6000);
   }catch(err){
     $('arrowIcon').classList.remove('hidden'); $('spinIcon').classList.add('hidden'); $('unlockStatus').classList.add('hidden');
     $('pw').disabled=false; $('btnUnlock').disabled=false;
@@ -377,25 +405,45 @@ window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||
 /* auto-unlock with cached key */
 (async function(){
   try{
+    const tp=performance.now();
     await S.loadParams();
+    const tParams=performance.now()-tp;
+    const tk=performance.now();
     const k=await idbGet(IDB_KEY);
+    const tKey=performance.now()-tk;
     if(!k) return;
     S.setKey(k);
+    const tt=performance.now();
     { const t=await idbGet(IDB_TOKEN); token=t||''; }
+    const tToken=performance.now()-tt;
     const t0=performance.now();
+    const tc=performance.now();
     const cached=await S.cacheGet('state');
+    const tCache=performance.now()-tc;
     if(cached && cached.nav && cached.nav.length){
       garbageMode=false; state=cached;
       $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
-      setLastDecrypt(performance.now()-t0); showToast('已自动解密 · '+fmtTime(performance.now()-t0)); enterApp();
-      loadAll().then(()=>{ enterApp(); }).catch(()=>{});
+      const tr=performance.now(); enterApp(); const tRender=performance.now()-tr;
+      const ms=performance.now()-t0;
+      setLastDecrypt(ms);
+      const stages={params:tParams,key:tKey,token:tToken,cache:tCache,render:tRender};
+      console.log('[decrypt] auto(cache)',ms,stages);
+      showToast(decryptToast('已自动解密(缓存)',ms,stages),6000);
+      const tb=performance.now();
+      loadAll().then(res=>{
+        enterApp();
+        const s2={params:tParams,key:tKey,token:tToken,...res.stages,render:performance.now()-tb};
+        console.log('[decrypt] auto(refresh)',res.ms,s2);
+      }).catch(()=>{});
     } else {
       const res=await loadAll();
       $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
       setLastDecrypt(res.ms);
       garbageMode=(res.parsed===0 && res.garbage!==null);
-      if(garbageMode) scheduleGarbage(); else showToast('已自动解密 · '+fmtTime(res.ms));
-      enterApp();
+      const tr=performance.now(); enterApp(); const tRender=performance.now()-tr;
+      const stages={params:tParams,key:tKey,token:tToken,...res.stages,render:tRender};
+      console.log('[decrypt] auto',res.ms,stages);
+      if(garbageMode) scheduleGarbage(); else showToast(decryptToast('已自动解密',res.ms,stages),6000);
     }
   }catch(e){ console.warn('自动解锁失败',e); }
 })();
