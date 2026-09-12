@@ -343,7 +343,7 @@ $('unlockForm').onsubmit=async(e)=>{
     $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
     setLastDecrypt(res.ms);
     garbageMode=(res.parsed===0 && res.garbage!==null);
-    if(garbageMode) scheduleGarbage(); else showToast('已解密');
+    if(garbageMode) scheduleGarbage(); else showToast('已解密 · '+fmtTime(res.ms));
     enterApp();
   }catch(err){
     $('arrowIcon').classList.remove('hidden'); $('spinIcon').classList.add('hidden'); $('unlockStatus').classList.add('hidden');
