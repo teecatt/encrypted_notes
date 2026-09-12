@@ -283,9 +283,12 @@ function enterApp(){
 /* load all notes from remote */
 async function loadAll(){
   const t0=performance.now();
-  const remote=await S.remoteNotes(token, true);
+  const man=await S.readManifest();
+  let list;
+  if(man && Array.isArray(man.notes)){ list=man.notes.map(p=>({path:p, id:S.idFromPath(p)})); }
+  else { list=await S.remoteNotes(token, true); }
   const notes={};
-  for(const e of remote){
+  for(const e of list){
     try{ const p=S.parseNote(await S.decryptText((await S.fetchNote(e.path)).trim())); if(!p) continue; notes[e.id]={id:e.id,title:p.title,content:p.content,order:p.order,ancestors:S.ancestorsFromPath(e.path)}; }catch(err){ console.warn('跳过',e.path,err); }
   }
   state={nav:S.buildNav(notes),pages:{}};
