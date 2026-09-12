@@ -279,7 +279,7 @@ const NOTES_RAW  = 'https://raw.githubusercontent.com/teecatt/encrypted_notes/de
 const API_URL    = 'https://api.github.com/repos/teecatt/encrypted_notes/contents/notes.enc.json';
 const ARGON2_URL = new URL('vendor/argon2-bundled.min.js', location.href).href;
 const $ = id => document.getElementById(id);
-let params=null, aesKey=null, state=null, token='', currentId=null, dirty=false;
+let params=null, aesKey=null, state=null, cloudState=null, token='', currentId=null, dirty=false;
 
 const bytesToB64 = b => { let s=''; b.forEach(x=>s+=String.fromCharCode(x)); return btoa(s); };
 const b64ToBytes = s => { const bin=atob(s); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; };
@@ -401,7 +401,7 @@ function draftKey(id){ return 'en-draft:'+id; }
 function loadDraft(id){ try{ const d=JSON.parse(localStorage.getItem(draftKey(id))||'null'); return d&&typeof d.c==='string'?d:null; }catch(e){ return null; } }
 function clearDraft(id){ try{ localStorage.removeItem(draftKey(id)); }catch(e){} }
 let autosaveCfg = loadCfg();
-function loadCfg(){ try{ const c=JSON.parse(localStorage.getItem('en-autosave')||'{}'); return {mode:(c.mode==='blur'?'blur':'timeout'), seconds:Math.min(86400,Math.max(1,parseInt(c.seconds,10)||30)), skipDesc:!!c.skipDesc}; }catch(e){ return {mode:'timeout',seconds:30,skipDesc:false}; } }
+function loadCfg(){ try{ const c=JSON.parse(localStorage.getItem('en-autosave')||'{}'); return {mode:(c.mode==='timeout'?'timeout':'blur'), seconds:Math.min(86400,Math.max(1,parseInt(c.seconds,10)||30)), skipDesc:!!c.skipDesc}; }catch(e){ return {mode:'blur',seconds:30,skipDesc:false}; } }
 function saveCfg(c){ autosaveCfg=c; try{ localStorage.setItem('en-autosave', JSON.stringify(c)); }catch(e){} }
 function applySaveUI(){ const el=$('descInline'); if(el) el.classList.toggle('hidden', !autosaveCfg.skipDesc); }
 
@@ -462,13 +462,27 @@ function renderTimeline(){
     row.onclick=()=>showVersionDiff(v.id);
     el.appendChild(row);
   }
+  if(currentId){
+    const baseRow=document.createElement('div'); baseRow.className='tl-item';
+    const bt=document.createElement('span'); bt.className='tl-time'; bt.textContent='基';
+    const bm=document.createElement('span'); bm.className='tl-meta'; bm.textContent=baseLabelFor(currentId)+' · 点击对比当前';
+    baseRow.appendChild(bt); baseRow.appendChild(bm);
+    baseRow.onclick=()=>openDiff(baseContentFor(currentId), $('ta').value, '基（'+baseLabelFor(currentId)+'）', '当前编辑器');
+    el.appendChild(baseRow);
+  }
 }
 function toggleSelect(id,on){ if(on) selectedVersions.add(id); else selectedVersions.delete(id); renderTimeline(); if(selectedVersions.size===2) showSelectedDiff(); }
+function baseContentFor(noteId){
+  const nv=versions.filter(v=>v.noteId===noteId).sort((a,b)=>a.id-b.id);
+  if(nv.length) return nv[0].content;
+  return (cloudState && cloudState.pages && cloudState.pages[noteId]) || '';
+}
+function baseLabelFor(noteId){
+  return versions.some(v=>v.noteId===noteId) ? '最早本地版本' : '云端版本';
+}
 function showVersionDiff(id){
-  const idx=versions.findIndex(v=>v.id===id); if(idx<0) return;
-  const cur=versions[idx];
-  const prev=versions.slice(idx+1).find(v=>v.noteId===cur.noteId);
-  openDiff(prev?prev.content:'', cur.content, prev?new Date(prev.ts).toLocaleTimeString():'（空）', new Date(cur.ts).toLocaleTimeString());
+  const cur=versions.find(v=>v.id===id); if(!cur) return;
+  openDiff(baseContentFor(cur.noteId), cur.content, '基（'+baseLabelFor(cur.noteId)+'）', new Date(cur.ts).toLocaleTimeString());
 }
 function showSelectedDiff(){
   const arr=[...selectedVersions].map(id=>versions.find(v=>v.id===id)).filter(Boolean).sort((a,b)=>a.id-b.id);
@@ -566,6 +580,7 @@ function selectNote(id, skipConfirm){
   if(draft && draft.c!==saved){ $('ta').value=draft.c; markDirty(true); showToast('已恢复未保存的草稿'); }
   else { $('ta').value=saved; markDirty(false); }
   renderNav();
+  renderTimeline();
   doRender(); updateStats(); updateAutosaveInfo();
   history.replaceState(null,'','#'+id);
 }
@@ -665,6 +680,7 @@ async function save(){
   try{
     const enc=await fetchNotes();
     const r=interpretPlaintext(await decryptToText(enc));
+    if(r.state) cloudState=r.state;
     if(r.state && stateEqual(r.state, newState)){ showToast('没有更改，无需保存'); return; }
   }catch(e){ console.warn('保存前比对失败', e); }
   let desc='';
@@ -713,6 +729,7 @@ async function sync(){
     const enc=await fetchNotes();
     const r=interpretPlaintext(await decryptToText(enc));
     if(!r.state) throw new Error('远端解密失败');
+    cloudState=r.state;
     if(stateEqual(r.state, state)){ setStatus('已是最新','ok'); showToast('远端与本地一致'); return; }
     const remote=r.state, localNow=$('ta').value, remoteNote=remote.pages[currentId]||'';
     saveDraft(); await snapshot('sync');
@@ -742,7 +759,7 @@ document.addEventListener('keydown', e=>{ if((e.ctrlKey||e.metaKey) && e.key.toL
 })();
 
 window.addEventListener('beforeunload', e=>{ if(dirty){ saveDraft(); e.preventDefault(); e.returnValue=''; } });
-document.addEventListener('visibilitychange', ()=>{ if(document.hidden && dirty) saveDraft(); });
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden && dirty){ saveDraft(); snapshot('background'); } });
 window.addEventListener('hashchange', ()=>{ const id=(location.hash||'').replace(/^#\/?/,''); if(state && id && id!==currentId) selectNote(id); });
 
 /* gate unlock */
@@ -757,7 +774,7 @@ $('gateForm').onsubmit = async (e)=>{
     const r=interpretPlaintext(await decryptToText(enc));
     if(!r.state){ $('gateMsg').textContent='密码错误或数据损坏'; btn.disabled=false; return; }
     try{ await idbPut(IDB_KEY, aesKey); }catch(err){}
-    state=r.state;
+    state=r.state; cloudState=r.state;
     const t=await idbGet(IDB_TOKEN); if(t) token=t;
     showEditor();
   }catch(err){ $('gateMsg').textContent='失败：'+err.message; btn.disabled=false; }
@@ -783,7 +800,7 @@ function showEditor(){
     const enc=await fetchNotes();
     const r=interpretPlaintext(await decryptToText(enc));
     if(!r.state){ $('gate').classList.remove('hidden'); return; }
-    state=r.state;
+    state=r.state; cloudState=r.state;
     showEditor();
   }catch(e){ console.warn(e); $('gate').classList.remove('hidden'); }
 })();
