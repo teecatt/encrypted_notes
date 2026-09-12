@@ -288,247 +288,59 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script type="module">
-const PARAMS_URL = 'https://raw.githubusercontent.com/teecatt/encrypted_params/main/params.json';
-const NOTES_RAW  = 'https://raw.githubusercontent.com/teecatt/encrypted_notes/dev/notes.enc.json';
-const API_URL    = 'https://api.github.com/repos/teecatt/encrypted_notes/contents/notes.enc.json';
-const ARGON2_URL = new URL('vendor/argon2-bundled.min.js', location.href).href;
+import * as S from './store.js';
+
 const $ = id => document.getElementById(id);
-let params=null, aesKey=null, state=null, cloudState=null, token='', currentId=null, dirty=false;
+let state=null, cloudNotes={}, meta={}, token='', currentId=null, dirty=false;
 
-const bytesToB64 = b => { let s=''; b.forEach(x=>s+=String.fromCharCode(x)); return btoa(s); };
-const b64ToBytes = s => { const bin=atob(s); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i); return a; };
-const hexToBytes = h => { const a=new Uint8Array(h.length/2); for(let i=0;i<a.length;i++)a[i]=parseInt(h.substr(i*2,2),16); return a; };
-const utf8ToB64  = s => bytesToB64(new TextEncoder().encode(s));
-function escapeHtml(s){ return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+const escapeHtml=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
-/* markdown-it + ++underline++ + data-line mapping */
+/* markdown */
 function underlinePlugin(md){
   md.inline.ruler.after('emphasis','underline', function(state, silent){
     const start=state.pos, src=state.src;
     if(src.charCodeAt(start)!==0x2B || src.charCodeAt(start+1)!==0x2B) return false;
     const end=src.indexOf('++', start+2);
     if(end<0 || end===start+2) return false;
-    if(!silent){
-      state.push('u_open','u',1);
-      const t=state.push('text','',0); t.content=src.slice(start+2,end);
-      state.push('u_close','u',-1);
-    }
-    state.pos=end+2;
-    return true;
+    if(!silent){ state.push('u_open','u',1); const t=state.push('text','',0); t.content=src.slice(start+2,end); state.push('u_close','u',-1); }
+    state.pos=end+2; return true;
   });
 }
 let md=null;
 if(window.markdownit){
-  md = window.markdownit({html:false, linkify:true, typographer:true});
+  md=window.markdownit({html:false,linkify:true,typographer:true});
   md.use(underlinePlugin);
-  const origRender = md.renderer.render.bind(md.renderer);
-  md.renderer.render = function(tokens, options, env){
-    for(const t of tokens){ if(t.map && t.nesting===1) t.attrSet('data-line', String(t.map[0])); }
-    return origRender(tokens, options, env);
-  };
-  md.renderer.rules.fence = function(tokens, idx){
-    const token=tokens[idx];
-    const info=(token.info||'').trim();
-    const lang=info.split(/\s+/g)[0];
+  const orig=md.renderer.render.bind(md.renderer);
+  md.renderer.render=function(tokens,options,env){ for(const t of tokens){ if(t.map&&t.nesting===1) t.attrSet('data-line',String(t.map[0])); } return orig(tokens,options,env); };
+  md.renderer.rules.fence=function(tokens,idx){
+    const token=tokens[idx], info=(token.info||'').trim(), lang=info.split(/\s+/g)[0];
     let code;
     if(lang && window.hljs && hljs.getLanguage(lang)){ try{ code=hljs.highlight(token.content,{language:lang,ignoreIllegals:true}).value; }catch(e){ code=escapeHtml(token.content); } }
-    else { code=escapeHtml(token.content); }
+    else code=escapeHtml(token.content);
     const line=token.map?` data-line="${token.map[0]}"`:'';
     return `<pre${line} class="hljs"><code class="language-${escapeHtml(lang)}">${code}</code></pre>\n`;
   };
 }
-function renderMd(src){
-  if(md){ try{ return md.render(src); }catch(e){} }
-  return '<pre style="white-space:pre-wrap">'+escapeHtml(src)+'</pre>';
-}
-
-/* crypto */
-async function loadParams(){ const r=await fetch(PARAMS_URL,{cache:'no-store'}); if(!r.ok) throw new Error('params 加载失败 '+r.status); params=await r.json(); }
-let nobleArgon2id=null;
-async function deriveKeyNoble(pw){
-  if(!nobleArgon2id){ const mod=await import('https://cdn.jsdelivr.net/npm/@noble/hashes@2.4.0/argon2.js'); nobleArgon2id=mod.argon2id; }
-  const raw=nobleArgon2id(new TextEncoder().encode(pw), hexToBytes(params.salt), {t:params.time,m:params.memKiB,p:params.parallelism,dkLen:params.hashLen});
-  return await crypto.subtle.importKey('raw', raw, {name:'AES-CTR'}, false, ['encrypt','decrypt']);
-}
-function deriveKeyWasm(pw){
-  return new Promise((resolve,reject)=>{
-    let w;
-    try{
-      const code="importScripts("+JSON.stringify(ARGON2_URL)+");self.onmessage=async function(e){var d=e.data;try{var salt=new Uint8Array(d.saltHex.match(/../g).map(function(h){return parseInt(h,16)}));var res=await argon2.hash({pass:d.pass,salt:salt,time:d.t,mem:d.m,parallelism:d.p,hashLen:d.dkLen,type:2});var ck=await crypto.subtle.importKey('raw',res.hash,{name:'AES-CTR'},false,['encrypt','decrypt']);self.postMessage({ok:true,key:ck});}catch(err){self.postMessage({ok:false,error:String(err&&err.message||err)});}};";
-      w=new Worker(URL.createObjectURL(new Blob([code],{type:'application/javascript'})));
-    }catch(err){ return reject(err); }
-    w.onmessage=(e)=>{w.terminate();e.data.ok?resolve(e.data.key):reject(new Error(e.data.error));};
-    w.onerror=(e)=>{w.terminate();reject(new Error(e.message||'WASM worker error'));};
-    w.postMessage({pass:pw,saltHex:params.salt,t:params.time,m:params.memKiB,p:params.parallelism,dkLen:params.hashLen});
-  });
-}
-async function deriveKey(pw){ try{ return await deriveKeyWasm(pw); }catch(e){ console.warn('WASM 回退 JS：'+e.message); return await deriveKeyNoble(pw); } }
-const IDB_NAME='en-keys',IDB_STORE='keys',IDB_KEY='aes',IDB_TOKEN='token';
-function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=()=>r.result.createObjectStore(IDB_STORE); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
-async function idbGet(k){ try{ const db=await idbOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }catch(e){ return null; } }
-async function idbPut(k,v){ const db=await idbOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(IDB_STORE,'readwrite').objectStore(IDB_STORE).put(v,k); q.onsuccess=()=>res(); q.onerror=()=>rej(q.error); }); }
-async function decryptToText(enc){
-  const pt=new Uint8Array(await crypto.subtle.decrypt({name:'AES-CTR',counter:b64ToBytes(enc.iv),length:128}, aesKey, b64ToBytes(enc.ct)));
-  return new TextDecoder('utf-8',{fatal:false}).decode(pt);
-}
-function interpretPlaintext(text){
-  if(text.startsWith(params.magic)){ try{ return {state:JSON.parse(text.slice(params.magic.length)),garbage:null}; }catch(e){ return {state:null,garbage:text}; } }
-  return {state:null,garbage:text};
-}
-async function encryptNotes(obj){
-  const data=new TextEncoder().encode(params.magic+JSON.stringify(obj));
-  const iv=crypto.getRandomValues(new Uint8Array(16));
-  const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-CTR',counter:iv,length:128}, aesKey, data));
-  return {v:1,alg:'AES-CTR-256',iv:bytesToB64(iv),ct:bytesToB64(ct)};
-}
-async function fetchNotes(){ const r=await fetch(NOTES_RAW+'?t='+Date.now(),{cache:'no-store'}); if(!r.ok) throw new Error('笔记加载失败 '+r.status); return await r.json(); }
+function renderMd(src){ if(md){ try{ return md.render(src); }catch(e){} } return '<pre style="white-space:pre-wrap">'+escapeHtml(src)+'</pre>'; }
 
 /* toast / status */
 let toastTimer=null;
 function showToast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),4000); }
-function setStatus(msg, cls){ const s=$('statusMsg'); s.textContent=msg||''; s.className='msg '+(cls||''); }
+function setStatus(msg,cls){ const s=$('statusMsg'); s.textContent=msg||''; s.className='msg '+(cls||''); }
 
-/* nav tree */
-function renderNav(){
-  const nav=$('nav'); nav.innerHTML='';
-  if(!state || !state.nav) return;
-  const add=(items,depth)=>{
-    for(const it of items){
-      const a=document.createElement('div');
-      a.className='nav-link'+(it.id===currentId?' active':'');
-      a.dataset.id=it.id;
-      a.style.paddingLeft=(9+depth*14)+'px';
-      a.textContent=it.title;
-      a.onclick=()=>{ selectNote(it.id); closeSidebar(); };
-      nav.appendChild(a);
-      if(it.children) add(it.children, depth+1);
-    }
-  };
-  add(state.nav,0);
-}
-function closeSidebar(){ $('sidebar').classList.remove('open'); $('scrim').classList.remove('show'); }
-$('menu').onclick=()=>{ $('sidebar').classList.toggle('open'); $('scrim').classList.toggle('show'); };
-$('scrim').onclick=closeSidebar;
+/* local key/token store (en-keys) */
+const IDB_NAME='en-keys',IDB_STORE='keys',IDB_KEY='aes',IDB_TOKEN='token';
+function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=()=>r.result.createObjectStore(IDB_STORE); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function idbGet(k){ try{ const db=await idbOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }catch(e){ return null; } }
+async function idbPut(k,v){ const db=await idbOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(IDB_STORE,'readwrite').objectStore(IDB_STORE).put(v,k); q.onsuccess=()=>res(); q.onerror=()=>rej(q.error); }); }
 
-/* nav editing (add / rename / delete / move / indent) */
-function findNode(nodes, id, parent){
-  for(let i=0;i<nodes.length;i++){
-    const n=nodes[i];
-    if(n.id===id) return {node:n, list:nodes, index:i, parent};
-    if(n.children){ const r=findNode(n.children, id, n); if(r) return r; }
-  }
-  return null;
-}
-function newId(){ return 'n'+Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
-function afterStructureChange(){ markDirty(true); renderNav(); renderTimeline(); updateStats(); }
-$('ntNew').onclick=()=>{
-  const title=prompt('新笔记标题：','新笔记'); if(title===null) return;
-  const id=newId(), node={title:title.trim()||'新笔记', id};
-  const ref=currentId?findNode(state.nav,currentId):null;
-  if(ref) ref.list.splice(ref.index+1,0,node); else state.nav.push(node);
-  state.pages[id]='';
-  afterStructureChange();
-  selectNote(id, true);
-  markDirty(true);
-};
-$('ntChild').onclick=()=>{
-  if(!currentId) return;
-  const title=prompt('子笔记标题：','子笔记'); if(title===null) return;
-  const ref=findNode(state.nav,currentId); if(!ref) return;
-  const id=newId(), node={title:title.trim()||'子笔记', id};
-  if(!ref.node.children) ref.node.children=[];
-  ref.node.children.push(node);
-  state.pages[id]='';
-  afterStructureChange();
-  selectNote(id, true);
-  markDirty(true);
-};
-$('ntRename').onclick=()=>{
-  if(!currentId) return;
-  const ref=findNode(state.nav,currentId); if(!ref) return;
-  const title=prompt('重命名：',ref.node.title); if(title===null) return;
-  ref.node.title=title.trim()||ref.node.title;
-  afterStructureChange();
-};
-$('ntDelete').onclick=()=>{
-  if(!currentId) return;
-  const ref=findNode(state.nav,currentId); if(!ref) return;
-  if(!confirm('删除「'+ref.node.title+'」？（子笔记会上移保留）')) return;
-  const kids=ref.node.children||[];
-  ref.list.splice(ref.index,1,...kids);
-  delete state.pages[ref.node.id];
-  afterStructureChange();
-  const first=state.nav[0]&&state.nav[0].id;
-  if(first){ selectNote(first,true); markDirty(true); } else { currentId=null; renderNav(); renderTimeline(); markDirty(true); }
-};
-function moveNode(dir){
-  if(!currentId) return;
-  const ref=findNode(state.nav,currentId); if(!ref) return;
-  const ni=ref.index+dir;
-  if(ni<0||ni>=ref.list.length) return;
-  const [n]=ref.list.splice(ref.index,1);
-  ref.list.splice(ni,0,n);
-  afterStructureChange();
-}
-$('ntUp').onclick=()=>moveNode(-1);
-$('ntDown').onclick=()=>moveNode(1);
-$('ntIndent').onclick=()=>{
-  if(!currentId) return;
-  const ref=findNode(state.nav,currentId); if(!ref||ref.index===0) return;
-  const prev=ref.list[ref.index-1];
-  const [n]=ref.list.splice(ref.index,1);
-  if(!prev.children) prev.children=[];
-  prev.children.push(n);
-  afterStructureChange();
-};
-$('ntOutdent').onclick=()=>{
-  if(!currentId) return;
-  const ref=findNode(state.nav,currentId); if(!ref||!ref.parent) return;
-  const parentRef=findNode(state.nav, ref.parent.id);
-  if(!parentRef) return;
-  const [n]=ref.list.splice(ref.index,1);
-  parentRef.list.splice(parentRef.index+1,0,n);
-  afterStructureChange();
-};
-
-/* draft cache */
-function draftKey(id){ return 'en-draft:'+id; }
-function loadDraft(id){ try{ const d=JSON.parse(localStorage.getItem(draftKey(id))||'null'); return d&&typeof d.c==='string'?d:null; }catch(e){ return null; } }
-function clearDraft(id){ try{ localStorage.removeItem(draftKey(id)); }catch(e){} }
-let autosaveCfg = loadCfg();
-function loadCfg(){ try{ const c=JSON.parse(localStorage.getItem('en-autosave')||'{}'); return {mode:(c.mode==='timeout'?'timeout':'blur'), seconds:Math.min(86400,Math.max(1,parseInt(c.seconds,10)||30)), skipDesc:!!c.skipDesc}; }catch(e){ return {mode:'blur',seconds:30,skipDesc:false}; } }
-function saveCfg(c){ autosaveCfg=c; try{ localStorage.setItem('en-autosave', JSON.stringify(c)); }catch(e){} }
-function applySaveUI(){ const el=$('descInline'); if(el) el.classList.toggle('hidden', !autosaveCfg.skipDesc); }
-
-let autosaveTimer=null;
-function cancelAutosave(){ if(autosaveTimer){ clearTimeout(autosaveTimer); autosaveTimer=null; } }
-function scheduleAutosave(){
-  if(autosaveCfg.mode==='blur') return;
-  cancelAutosave();
-  autosaveTimer=setTimeout(()=>{ autosaveTimer=null; saveDraft(); snapshot('draft'); }, autosaveCfg.seconds*1000);
-}
-function saveDraft(){
-  if(!state || !currentId) return;
-  const content=$('ta').value;
-  if(content===state.pages[currentId]){ clearDraft(currentId); updateAutosaveInfo(); return; }
-  try{ localStorage.setItem(draftKey(currentId), JSON.stringify({c:content,t:Date.now()})); }catch(e){}
-  updateAutosaveInfo();
-}
-function updateAutosaveInfo(msg){
-  const el=$('autosaveInfo');
-  if(msg){ el.textContent=msg; return; }
-  const d=loadDraft(currentId);
-  el.textContent = d ? ('草稿缓存于 '+fmtClock(d.t)) : (autosaveCfg.mode==='blur'?'失焦缓存':'定时 '+autosaveCfg.seconds+'s');
-}
-
-/* local versions (timeline) */
+/* versions (timeline) */
 const VDB='en-versions', VSTORE='v';
 function vOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open(VDB,1); r.onupgradeneeded=()=>{ r.result.createObjectStore(VSTORE,{keyPath:'id',autoIncrement:true}); }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 async function vAdd(rec){ const db=await vOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(VSTORE,'readwrite').objectStore(VSTORE).add(rec); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
 async function vAll(){ try{ const db=await vOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(VSTORE,'readonly').objectStore(VSTORE).getAll(); q.onsuccess=()=>res(q.result||[]); q.onerror=()=>rej(q.error); }); }catch(e){ return []; } }
 async function vClear(){ try{ const db=await vOpen(); await new Promise((res,rej)=>{ const tx=db.transaction(VSTORE,'readwrite'); tx.objectStore(VSTORE).clear(); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }catch(e){} }
 async function vDelete(ids){ if(!ids.length) return; try{ const db=await vOpen(); await new Promise((res,rej)=>{ const tx=db.transaction(VSTORE,'readwrite'); const os=tx.objectStore(VSTORE); ids.forEach(i=>os.delete(i)); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }catch(e){} }
-
 let versions=[], selectedVersions=new Set();
 const REASON_LABEL={draft:'定时缓存', blur:'焦点改变', background:'切入后台', switch:'切换笔记', sync:'同步'};
 function reasonLabel(r){ return REASON_LABEL[r]||r||''; }
@@ -538,28 +350,30 @@ async function snapshot(reason){
   if(!state || !currentId) return;
   const content=$('ta').value;
   const latest=versions.find(v=>v.noteId===currentId);
-  const baseline = latest ? latest.content : ((cloudState && cloudState.pages && cloudState.pages[currentId]) || '');
+  const baseline=latest?latest.content:((cloudNotes[currentId]&&cloudNotes[currentId].content)||'');
   if(content===baseline) return;
   const now=Date.now();
-  const id=await vAdd({ts:now, noteId:currentId, content, reason});
-  versions.unshift({id, ts:now, noteId:currentId, content, reason});
+  const id=await vAdd({ts:now,noteId:currentId,content,reason});
+  versions.unshift({id,ts:now,noteId:currentId,content,reason});
   while(versions.length>50){ const old=versions.pop(); vDelete([old.id]); }
   renderTimeline();
 }
+function baseContentFor(noteId){
+  const nv=versions.filter(v=>v.noteId===noteId).sort((a,b)=>a.id-b.id);
+  if(nv.length) return nv[0].content;
+  return (cloudNotes[noteId]&&cloudNotes[noteId].content)||'';
+}
+function baseLabelFor(noteId){ return versions.some(v=>v.noteId===noteId)?'最早本地版本':'云端版本'; }
 function renderTimeline(){
   const el=$('timeline'); if(!el) return;
   el.innerHTML='';
-  $('tlCount').textContent = versions.length?('('+versions.length+')'):'';
+  $('tlCount').textContent=versions.length?('('+versions.length+')'):'';
   if(!versions.length){ el.innerHTML='<div class="tl-empty">暂无本地版本（有改动时自动记录；推送成功后清空）</div>'; return; }
   for(const v of versions){
-    const row=document.createElement('div');
-    row.className='tl-item'+(selectedVersions.has(v.id)?' sel':'');
-    row.dataset.id=v.id;
+    const row=document.createElement('div'); row.className='tl-item'+(selectedVersions.has(v.id)?' sel':''); row.dataset.id=v.id;
     const t=document.createElement('span'); t.className='tl-time'; t.textContent=fmtClock(v.ts);
     const m=document.createElement('span'); m.className='tl-meta'; m.textContent=(v.noteId||'')+' · '+reasonLabel(v.reason);
-    row.appendChild(t); row.appendChild(m);
-    attachLongPress(row, v.id);
-    el.appendChild(row);
+    row.appendChild(t); row.appendChild(m); attachLongPress(row,v.id); el.appendChild(row);
   }
   if(currentId){
     const baseRow=document.createElement('div'); baseRow.className='tl-item tl-base';
@@ -570,25 +384,17 @@ function renderTimeline(){
     el.appendChild(baseRow);
   }
 }
-function attachLongPress(row, id){
+function attachLongPress(row,id){
   let timer=null, longPressed=false;
-  const start=()=>{ longPressed=false; timer=setTimeout(()=>{ longPressed=true; toggleSelect(id, !selectedVersions.has(id)); }, 500); };
+  const start=()=>{ longPressed=false; timer=setTimeout(()=>{ longPressed=true; toggleSelect(id,!selectedVersions.has(id)); },500); };
   const cancel=()=>{ if(timer){ clearTimeout(timer); timer=null; } };
-  row.addEventListener('pointerdown', start);
-  row.addEventListener('pointerup', ()=>{ cancel(); if(!longPressed) showVersionDiff(id); });
-  row.addEventListener('pointerleave', cancel);
-  row.addEventListener('pointercancel', cancel);
-  row.addEventListener('contextmenu', e=>e.preventDefault());
+  row.addEventListener('pointerdown',start);
+  row.addEventListener('pointerup',()=>{ cancel(); if(!longPressed) showVersionDiff(id); });
+  row.addEventListener('pointerleave',cancel);
+  row.addEventListener('pointercancel',cancel);
+  row.addEventListener('contextmenu',e=>e.preventDefault());
 }
 function toggleSelect(id,on){ if(on) selectedVersions.add(id); else selectedVersions.delete(id); renderTimeline(); if(selectedVersions.size===2) showSelectedDiff(); }
-function baseContentFor(noteId){
-  const nv=versions.filter(v=>v.noteId===noteId).sort((a,b)=>a.id-b.id);
-  if(nv.length) return nv[0].content;
-  return (cloudState && cloudState.pages && cloudState.pages[noteId]) || '';
-}
-function baseLabelFor(noteId){
-  return versions.some(v=>v.noteId===noteId) ? '最早本地版本' : '云端版本';
-}
 function showVersionDiff(id){
   const cur=versions.find(v=>v.id===id); if(!cur) return;
   openDiff(baseContentFor(cur.noteId), cur.content, '基（'+baseLabelFor(cur.noteId)+'）', fmtClock(cur.ts));
@@ -609,161 +415,236 @@ function diffLines(a,b){
   while(j<m) out.push({t:'+',s:B[j++]});
   return out;
 }
-function openDiff(base, latest, baseLabel, latestLabel){
+function openDiff(base,latest,baseLabel,latestLabel){
   $('diffLabels').textContent=baseLabel+' → '+latestLabel;
   const body=$('diffBody'); body.innerHTML='';
-  for(const l of diffLines(base, latest)){
-    const d=document.createElement('div');
-    d.className='diff-line'+(l.t==='+'?' diff-add':l.t==='-'?' diff-del':'');
+  for(const l of diffLines(base,latest)){
+    const d=document.createElement('div'); d.className='diff-line'+(l.t==='+'?' diff-add':l.t==='-'?' diff-del':'');
     const sign=document.createElement('span'); sign.className='diff-sign'; sign.textContent=l.t===' '?' ':l.t;
-    d.appendChild(sign); d.appendChild(document.createTextNode(l.s));
-    body.appendChild(d);
+    d.appendChild(sign); d.appendChild(document.createTextNode(l.s)); body.appendChild(d);
   }
   $('diffModal').classList.remove('hidden');
 }
 $('diffClose').onclick=()=>$('diffModal').classList.add('hidden');
-function stateEqual(a,b){
-  if(!a||!b) return false;
-  if(JSON.stringify(a.nav)!==JSON.stringify(b.nav)) return false;
-  const ka=Object.keys(a.pages||{}).sort(), kb=Object.keys(b.pages||{}).sort();
-  if(ka.length!==kb.length || ka.some((k,i)=>k!==kb[i])) return false;
-  return ka.every(k=>a.pages[k]===b.pages[k]);
+
+/* draft cache */
+function draftKey(id){ return 'en-draft:'+id; }
+function loadDraft(id){ try{ const d=JSON.parse(localStorage.getItem(draftKey(id))||'null'); return d&&typeof d.c==='string'?d:null; }catch(e){ return null; } }
+function clearDraft(id){ try{ localStorage.removeItem(draftKey(id)); }catch(e){} }
+let autosaveCfg=loadCfg();
+function loadCfg(){ try{ const c=JSON.parse(localStorage.getItem('en-autosave')||'{}'); return {mode:(c.mode==='timeout'?'timeout':'blur'),seconds:Math.min(86400,Math.max(1,parseInt(c.seconds,10)||30)),skipDesc:!!c.skipDesc}; }catch(e){ return {mode:'blur',seconds:30,skipDesc:false}; } }
+function saveCfg(c){ autosaveCfg=c; try{ localStorage.setItem('en-autosave',JSON.stringify(c)); }catch(e){} }
+function applySaveUI(){ const el=$('descInline'); if(el) el.classList.toggle('hidden',!autosaveCfg.skipDesc); }
+let autosaveTimer=null;
+function cancelAutosave(){ if(autosaveTimer){ clearTimeout(autosaveTimer); autosaveTimer=null; } }
+function scheduleAutosave(){ if(autosaveCfg.mode==='blur') return; cancelAutosave(); autosaveTimer=setTimeout(()=>{ autosaveTimer=null; saveDraft(); snapshot('draft'); },autosaveCfg.seconds*1000); }
+function saveDraft(){
+  if(!state||!currentId) return;
+  const content=$('ta').value;
+  const saved=(cloudNotes[currentId]&&cloudNotes[currentId].content)||'';
+  if(content===saved){ clearDraft(currentId); updateAutosaveInfo(); return; }
+  try{ localStorage.setItem(draftKey(currentId),JSON.stringify({c:content,t:Date.now()})); }catch(e){}
+  updateAutosaveInfo();
+}
+function updateAutosaveInfo(msg){
+  const el=$('autosaveInfo');
+  if(msg){ el.textContent=msg; return; }
+  const d=loadDraft(currentId);
+  el.textContent=d?('草稿缓存于 '+fmtClock(d.t)):(autosaveCfg.mode==='blur'?'失焦缓存':'定时 '+autosaveCfg.seconds+'s');
 }
 
-/* render throttle (max 1/s) + preview scroll sync */
+/* render throttle + preview scroll sync */
 let lastRender=0, renderTimer=null;
-function scheduleRender(){
-  const now=Date.now();
-  if(now-lastRender>=1000){ doRender(); return; }
-  if(!renderTimer){ renderTimer=setTimeout(()=>{ renderTimer=null; doRender(); }, 1000-(now-lastRender)); }
-}
-function doRender(){
-  lastRender=Date.now();
-  $('preview').innerHTML = renderMd($('ta').value) || '<p class="placeholder">（空）</p>';
-  syncPreviewFromCursor();
-}
-function updateStats(){ $('stats').textContent = $('ta').value.length+' 字符'; }
-
-function cursorLine(){
-  const ta=$('ta');
-  return ta.value.slice(0, ta.selectionStart).split('\n').length-1;
-}
-function topVisibleLine(){
-  const ta=$('ta');
-  const lh=parseFloat(getComputedStyle(ta).lineHeight)||24.5;
-  return Math.floor(ta.scrollTop/lh);
-}
+function scheduleRender(){ const now=Date.now(); if(now-lastRender>=1000){ doRender(); return; } if(!renderTimer){ renderTimer=setTimeout(()=>{ renderTimer=null; doRender(); },1000-(now-lastRender)); } }
+function doRender(){ lastRender=Date.now(); $('preview').innerHTML=renderMd($('ta').value)||'<p class="placeholder">（空）</p>'; syncPreviewFromCursor(); }
+function updateStats(){ $('stats').textContent=$('ta').value.length+' 字符'; }
+function cursorLine(){ const ta=$('ta'); return ta.value.slice(0,ta.selectionStart).split('\n').length-1; }
+function topVisibleLine(){ const ta=$('ta'); const lh=parseFloat(getComputedStyle(ta).lineHeight)||24.5; return Math.floor(ta.scrollTop/lh); }
 function scrollPreviewToLine(line){
-  const pv=$('preview');
-  const nodes=pv.querySelectorAll('[data-line]');
-  let target=null;
+  const pv=$('preview'); const nodes=pv.querySelectorAll('[data-line]'); let target=null;
   for(const n of nodes){ const l=parseInt(n.dataset.line,10); if(l<=line) target=n; else break; }
   if(!target) return;
-  const top=target.getBoundingClientRect().top - pv.getBoundingClientRect().top + pv.scrollTop;
-  pv.scrollTop = Math.max(0, top-8);
+  const top=target.getBoundingClientRect().top-pv.getBoundingClientRect().top+pv.scrollTop;
+  pv.scrollTop=Math.max(0,top-8);
 }
 function syncPreviewFromCursor(){ if($('preview').querySelector('[data-line]')) scrollPreviewToLine(cursorLine()); }
+function onInput(){ markDirty(true); scheduleRender(); scheduleAutosave(); updateStats(); }
+function markDirty(v){ dirty=v; $('dirtyDot').classList.toggle('hidden',!v); }
+$('ta').addEventListener('input',onInput);
+$('ta').addEventListener('click',syncPreviewFromCursor);
+$('ta').addEventListener('keyup',e=>{ if(e.key.length>1||e.key==='Enter'||e.key==='ArrowUp'||e.key==='ArrowDown') syncPreviewFromCursor(); });
+$('ta').addEventListener('scroll',()=>{ if($('preview').querySelector('[data-line]')) scrollPreviewToLine(topVisibleLine()); });
+$('ta').addEventListener('blur',()=>{ if(autosaveCfg.mode==='blur'){ saveDraft(); snapshot('blur'); } });
 
-/* editing */
-function onInput(){
-  markDirty(true);
-  scheduleRender();
-  scheduleAutosave();
-  updateStats();
+/* data model */
+function stateToNotes(){
+  const out={};
+  (function walk(nodes,anc){
+    (nodes||[]).forEach((n,i)=>{
+      out[n.id]={id:n.id,title:n.title,content:(state.pages&&state.pages[n.id])||'',order:i,ancestors:anc.slice()};
+      if(n.children) walk(n.children,anc.concat([n.id]));
+    });
+  })(state.nav,[]);
+  return out;
 }
-function markDirty(v){ dirty=v; $('dirtyDot').classList.toggle('hidden', !v); }
-$('ta').addEventListener('input', onInput);
-$('ta').addEventListener('click', syncPreviewFromCursor);
-$('ta').addEventListener('keyup', (e)=>{ if(e.key.length>1||e.key==='Enter'||e.key==='ArrowUp'||e.key==='ArrowDown') syncPreviewFromCursor(); });
-$('ta').addEventListener('scroll', ()=>{ if($('preview').querySelector('[data-line]')) scrollPreviewToLine(topVisibleLine()); });
-$('ta').addEventListener('blur', ()=>{ if(autosaveCfg.mode==='blur'){ saveDraft(); snapshot('blur'); } });
+function applyNotes(notes){ state={nav:S.buildNav(notes),pages:{}}; Object.values(notes).forEach(n=>{ state.pages[n.id]=n.content||''; }); }
+
+/* nav */
+function renderNav(){
+  const nav=$('nav'); nav.innerHTML='';
+  if(!state||!state.nav) return;
+  const add=(items,depth)=>{
+    for(const it of items){
+      const a=document.createElement('div'); a.className='nav-link'+(it.id===currentId?' active':''); a.dataset.id=it.id;
+      a.style.paddingLeft=(9+depth*14)+'px'; a.textContent=it.title;
+      a.onclick=()=>{ selectNote(it.id); closeSidebar(); };
+      nav.appendChild(a);
+      if(it.children) add(it.children,depth+1);
+    }
+  };
+  add(state.nav,0);
+}
+function closeSidebar(){ $('sidebar').classList.remove('open'); $('scrim').classList.remove('show'); }
+$('menu').onclick=()=>{ $('sidebar').classList.toggle('open'); $('scrim').classList.toggle('show'); };
+$('scrim').onclick=closeSidebar;
+
+/* nav editing */
+function findNode(nodes,id,parent){
+  for(let i=0;i<nodes.length;i++){
+    const n=nodes[i];
+    if(n.id===id) return {node:n,list:nodes,index:i,parent};
+    if(n.children){ const r=findNode(n.children,id,n); if(r) return r; }
+  }
+  return null;
+}
+function afterStructureChange(){ markDirty(true); renderNav(); renderTimeline(); updateStats(); }
+$('ntNew').onclick=()=>{
+  const title=prompt('新笔记标题：','新笔记'); if(title===null) return;
+  const id=S.newId(), node={title:title.trim()||'新笔记',id};
+  const ref=currentId?findNode(state.nav,currentId):null;
+  if(ref) ref.list.splice(ref.index+1,0,node); else state.nav.push(node);
+  state.pages[id]='';
+  afterStructureChange(); selectNote(id,true); markDirty(true);
+};
+$('ntChild').onclick=()=>{
+  if(!currentId) return;
+  const title=prompt('子笔记标题：','子笔记'); if(title===null) return;
+  const ref=findNode(state.nav,currentId); if(!ref) return;
+  const id=S.newId(), node={title:title.trim()||'子笔记',id};
+  if(!ref.node.children) ref.node.children=[];
+  ref.node.children.push(node); state.pages[id]='';
+  afterStructureChange(); selectNote(id,true); markDirty(true);
+};
+$('ntRename').onclick=()=>{
+  if(!currentId) return;
+  const ref=findNode(state.nav,currentId); if(!ref) return;
+  const title=prompt('重命名：',ref.node.title); if(title===null) return;
+  ref.node.title=title.trim()||ref.node.title; afterStructureChange();
+};
+$('ntDelete').onclick=()=>{
+  if(!currentId) return;
+  const ref=findNode(state.nav,currentId); if(!ref) return;
+  if(!confirm('删除「'+ref.node.title+'」？（子笔记会上移保留）')) return;
+  const kids=ref.node.children||[];
+  ref.list.splice(ref.index,1,...kids);
+  delete state.pages[ref.node.id];
+  afterStructureChange();
+  const first=state.nav[0]&&state.nav[0].id;
+  if(first){ selectNote(first,true); markDirty(true); } else { currentId=null; renderNav(); renderTimeline(); markDirty(true); }
+};
+function moveNode(dir){
+  if(!currentId) return;
+  const ref=findNode(state.nav,currentId); if(!ref) return;
+  const ni=ref.index+dir; if(ni<0||ni>=ref.list.length) return;
+  const [n]=ref.list.splice(ref.index,1); ref.list.splice(ni,0,n); afterStructureChange();
+}
+$('ntUp').onclick=()=>moveNode(-1);
+$('ntDown').onclick=()=>moveNode(1);
+$('ntIndent').onclick=()=>{
+  if(!currentId) return;
+  const ref=findNode(state.nav,currentId); if(!ref||ref.index===0) return;
+  const prev=ref.list[ref.index-1]; const [n]=ref.list.splice(ref.index,1);
+  if(!prev.children) prev.children=[]; prev.children.push(n); afterStructureChange();
+};
+$('ntOutdent').onclick=()=>{
+  if(!currentId) return;
+  const ref=findNode(state.nav,currentId); if(!ref||!ref.parent) return;
+  const parentRef=findNode(state.nav,ref.parent.id); if(!parentRef) return;
+  const [n]=ref.list.splice(ref.index,1); parentRef.list.splice(parentRef.index+1,0,n); afterStructureChange();
+};
 
 /* note selection */
-function selectNote(id, skipConfirm){
-  if(!state.pages[id]) id=state.nav[0].id;
+function selectNote(id,skipConfirm){
+  if(!id){ currentId=null; $('ta').value=''; doRender(); return; }
+  if(!state.pages[id]) id=state.nav[0]&&state.nav[0].id;
   if(!skipConfirm && dirty && currentId && !confirm('当前笔记有未保存的修改，仍要切换吗？')){ renderNav(); return; }
-  if(currentId && dirty){ saveDraft(); snapshot('switch'); }
+  if(currentId&&dirty){ saveDraft(); snapshot('switch'); }
   cancelAutosave();
   currentId=id;
-  const draft=loadDraft(id), saved=state.pages[id]||'';
-  if(draft && draft.c!==saved){ $('ta').value=draft.c; markDirty(true); showToast('已恢复未保存的草稿'); }
+  const draft=loadDraft(id), saved=(state.pages[id]||'');
+  if(draft&&draft.c!==saved){ $('ta').value=draft.c; markDirty(true); showToast('已恢复未保存的草稿'); }
   else { $('ta').value=saved; markDirty(false); }
-  renderNav();
-  renderTimeline();
-  doRender(); updateStats(); updateAutosaveInfo();
+  renderNav(); renderTimeline(); doRender(); updateStats(); updateAutosaveInfo();
   history.replaceState(null,'','#'+id);
 }
 
 /* toolbar */
-function surround(before, after){
-  const ta=$('ta'), s=ta.selectionStart, e=ta.selectionEnd, sel=ta.value.slice(s,e);
-  ta.setRangeText(before+sel+after, s, e, 'end');
-  const inner=s+before.length;
-  ta.setSelectionRange(inner, inner+sel.length);
-  ta.focus(); onInput();
+function surround(before,after){
+  const ta=$('ta'),s=ta.selectionStart,e=ta.selectionEnd,sel=ta.value.slice(s,e);
+  ta.setRangeText(before+sel+after,s,e,'end');
+  const inner=s+before.length; ta.setSelectionRange(inner,inner+sel.length); ta.focus(); onInput();
 }
 function linePrefix(prefix){
-  const ta=$('ta'), s=ta.selectionStart, e=ta.selectionEnd, val=ta.value;
-  const start=val.lastIndexOf('\n', s-1)+1;
-  let end=val.indexOf('\n', e); if(end<0) end=val.length;
+  const ta=$('ta'),s=ta.selectionStart,e=ta.selectionEnd,val=ta.value;
+  const start=val.lastIndexOf('\n',s-1)+1; let end=val.indexOf('\n',e); if(end<0) end=val.length;
   const out=val.slice(start,end).split('\n').map(l=>prefix+l).join('\n');
-  ta.setRangeText(out, start, end, 'end');
-  ta.setSelectionRange(start, start+out.length);
-  ta.focus(); onInput();
+  ta.setRangeText(out,start,end,'end'); ta.setSelectionRange(start,start+out.length); ta.focus(); onInput();
 }
 function insertLink(img){
-  const ta=$('ta'), s=ta.selectionStart, e=ta.selectionEnd;
+  const ta=$('ta'),s=ta.selectionStart,e=ta.selectionEnd;
   const sel=ta.value.slice(s,e)||(img?'alt':'text');
   const text=(img?'!':'')+'['+sel+'](url)';
-  ta.setRangeText(text, s, e, 'end');
-  const at=s+text.lastIndexOf('(url)')+1;
-  ta.setSelectionRange(at, at+3);
-  ta.focus(); onInput();
+  ta.setRangeText(text,s,e,'end');
+  const at=s+text.lastIndexOf('(url)')+1; ta.setSelectionRange(at,at+3); ta.focus(); onInput();
 }
 const acts={
   bold:()=>surround('**','**'), italic:()=>surround('*','*'), underline:()=>surround('++','++'),
   strike:()=>surround('~~','~~'), code:()=>surround('`','`'),
   codeblock:()=>surround('```\n','\n```'), ul:()=>linePrefix('- '), ol:()=>linePrefix('1. '),
   quote:()=>linePrefix('> '), h2:()=>linePrefix('## '),
-  hr:()=>{ const ta=$('ta'); ta.setRangeText('\n---\n', ta.selectionStart, ta.selectionEnd, 'end'); ta.focus(); onInput(); },
+  hr:()=>{ const ta=$('ta'); ta.setRangeText('\n---\n',ta.selectionStart,ta.selectionEnd,'end'); ta.focus(); onInput(); },
   link:()=>insertLink(false), image:()=>insertLink(true)
 };
-$('toolbar').addEventListener('click', e=>{
-  const b=e.target.closest('[data-act]'); if(!b) return;
-  const fn=acts[b.dataset.act]; if(fn) fn();
-});
+$('toolbar').addEventListener('click',e=>{ const b=e.target.closest('[data-act]'); if(!b) return; const fn=acts[b.dataset.act]; if(fn) fn(); });
 
 /* settings */
 $('btnSettings').onclick=()=>{
   document.querySelector(`input[name=asmode][value="${autosaveCfg.mode}"]`).checked=true;
   $('asSeconds').value=autosaveCfg.seconds;
-  $('asSeconds').disabled = autosaveCfg.mode!=='timeout';
-  $('skipDesc').checked = autosaveCfg.skipDesc;
+  $('asSeconds').disabled=autosaveCfg.mode!=='timeout';
+  $('skipDesc').checked=autosaveCfg.skipDesc;
   $('settingsModal').classList.remove('hidden');
 };
-document.querySelectorAll('input[name=asmode]').forEach(r=>r.onchange=()=>{ $('asSeconds').disabled = document.querySelector('input[name=asmode]:checked').value!=='timeout'; });
+document.querySelectorAll('input[name=asmode]').forEach(r=>r.onchange=()=>{ $('asSeconds').disabled=document.querySelector('input[name=asmode]:checked').value!=='timeout'; });
 $('setCancel').onclick=()=>$('settingsModal').classList.add('hidden');
 $('settingsForm').onsubmit=(e)=>{
   e.preventDefault();
   const mode=document.querySelector('input[name=asmode]:checked').value;
   let sec=parseInt($('asSeconds').value,10); if(!isFinite(sec)) sec=30;
-  sec=Math.min(86400, Math.max(1, sec));
-  saveCfg({mode, seconds:sec, skipDesc:$('skipDesc').checked});
+  sec=Math.min(86400,Math.max(1,sec));
+  saveCfg({mode,seconds:sec,skipDesc:$('skipDesc').checked});
   cancelAutosave(); scheduleAutosave();
-  $('settingsModal').classList.add('hidden');
-  applySaveUI(); updateAutosaveInfo();
-  showToast('设置已保存');
+  $('settingsModal').classList.add('hidden'); applySaveUI(); updateAutosaveInfo(); showToast('设置已保存');
 };
 
-/* save to dev */
+/* save / sync */
 let saveResolver=null;
-function askSave(needDesc, needToken){
+function askSave(needDesc,needToken){
   return new Promise(resolve=>{
     saveResolver=resolve;
-    $('descField').classList.toggle('hidden', !needDesc);
-    $('tokenField').classList.toggle('hidden', !needToken);
-    $('saveDesc').value='';
-    $('tk').value='';
+    $('descField').classList.toggle('hidden',!needDesc);
+    $('tokenField').classList.toggle('hidden',!needToken);
+    $('saveDesc').value=''; $('tk').value='';
     $('saveModal').classList.remove('hidden');
     setTimeout(()=>{ (needDesc?$('saveDesc'):$('tk')).focus(); },50);
   });
@@ -776,87 +657,101 @@ $('saveForm').onsubmit=(e)=>{
   const t=needToken?$('tk').value.trim():'';
   $('saveModal').classList.add('hidden');
   if(t) idbPut(IDB_TOKEN,t).catch(()=>{});
-  if(saveResolver){ saveResolver({desc, token:t}); saveResolver=null; }
+  if(saveResolver){ saveResolver({desc,token:t}); saveResolver=null; }
 };
-$('saveCancel').onclick=()=>{
-  $('saveModal').classList.add('hidden');
-  if(saveResolver){ saveResolver(null); saveResolver=null; }
-};
+$('saveCancel').onclick=()=>{ $('saveModal').classList.add('hidden'); if(saveResolver){ saveResolver(null); saveResolver=null; } };
 
 async function save(){
-  if(!state){ return; }
-  const newState={nav:state.nav, pages:Object.assign({}, state.pages, {[currentId]:$('ta').value})};
-  try{
-    const enc=await fetchNotes();
-    const r=interpretPlaintext(await decryptToText(enc));
-    if(r.state) cloudState=r.state;
-    if(r.state && stateEqual(r.state, newState)){ showToast('没有更改，无需保存'); return; }
-  }catch(e){ console.warn('保存前比对失败', e); }
+  if(!state) return;
+  const local=stateToNotes();
+  const changed=[], removed=[];
+  for(const id in local){
+    const l=local[id], c=cloudNotes[id], m=meta[id];
+    const same=c && l.title===c.title && l.content===c.content && l.order===c.order && m && m.path===S.notePath(id,l.ancestors);
+    if(!same) changed.push(l);
+  }
+  for(const id in cloudNotes){ if(!local[id]) removed.push(id); }
+  if(!changed.length && !removed.length){ showToast('没有更改，无需保存'); return; }
   let desc='';
-  const needDesc=!autosaveCfg.skipDesc;
-  const needToken=!token;
-  if(needDesc || needToken){
-    const r=await askSave(needDesc, needToken);
+  const needDesc=!autosaveCfg.skipDesc, needToken=!token;
+  if(needDesc||needToken){
+    const r=await askSave(needDesc,needToken);
     if(!r) return;
     desc=r.desc;
     if(needToken){ if(!r.token) return; token=r.token; }
-  } else {
-    desc=$('descInline').value.trim();
-  }
-  state.pages[currentId]=$('ta').value;
-  $('btnSave').disabled=true;
-  setStatus('加密并提交中…','warn');
-  const base='update: '+currentId+' @ '+new Date().toISOString();
+  } else { desc=$('descInline').value.trim(); }
+  $('btnSave').disabled=true; setStatus('加密并提交中…','warn');
+  const base='update: '+changed.length+' 篇笔记 @ '+new Date().toISOString();
   const message=desc?base+'\n\n'+desc:base;
   try{
-    const enc=await encryptNotes(state);
-    const body=JSON.stringify(enc,null,2)+'\n';
-    const auth={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'};
-    const g=await fetch(API_URL+'?ref=dev&t='+Date.now(),{headers:auth});
-    if(!g.ok){ if(g.status===401||g.status===403){ token=''; } throw new Error('读取文件信息失败 '+g.status+'（Token 无效或无权限）'); }
-    const meta=await g.json();
-    const put=await fetch(API_URL,{method:'PUT',headers:{...auth,'Content-Type':'application/json'},
-      body:JSON.stringify({message, content:utf8ToB64(body), branch:'dev', sha:meta.sha})});
-    const res=await put.json();
-    if(!put.ok){ if(put.status===401||put.status===403){ token=''; } throw new Error(res.message||('提交失败 '+put.status)); }
-    clearDraft(currentId); cancelAutosave();
-    markDirty(false); updateAutosaveInfo();
+    for(const n of changed){
+      const path=S.notePath(n.id,n.ancestors);
+      const b64=await S.encryptText(S.packNote(n.order,n.title,n.content));
+      const old=meta[n.id];
+      const sha=await S.putNote(path,b64, old&&old.path===path?old.sha:null, token, message);
+      if(old&&old.path&&old.path!==path){ try{ await S.deletePath(old.path,old.sha,token,message); }catch(e){} }
+      meta[n.id]={sha,path};
+    }
+    for(const id of removed){
+      const m=meta[id];
+      if(m){ try{ await S.deletePath(m.path,m.sha,token,message); }catch(e){} delete meta[id]; }
+    }
+    cloudNotes=local;
+    await S.cachePut('state',state); await S.cachePut('meta',meta); await S.cachePut('cloud',cloudNotes);
+    clearDraft(currentId); cancelAutosave(); markDirty(false); updateAutosaveInfo();
     if($('descInline')) $('descInline').value='';
     await vClear(); versions=[]; selectedVersions.clear(); renderTimeline();
-    setStatus('已提交到 dev：'+res.commit.sha.slice(0,7),'ok');
-    showToast('已保存到 dev');
-  }catch(e){
-    setStatus('✗ '+e.message,'err');
-  }finally{ $('btnSave').disabled=false; }
+    setStatus('已提交到远端','ok'); showToast('已保存到远端');
+  }catch(e){ setStatus('✗ '+e.message,'err'); }
+  finally{ $('btnSave').disabled=false; }
 }
-$('btnSave').onclick = save;
+$('btnSave').onclick=save;
 
 async function sync(){
-  if(!state){ return; }
+  if(!state) return;
   $('btnSync').disabled=true; setStatus('拉取远端…','warn');
   try{
-    const enc=await fetchNotes();
-    const r=interpretPlaintext(await decryptToText(enc));
-    if(!r.state) throw new Error('远端解密失败');
-    cloudState=r.state;
-    if(stateEqual(r.state, state)){ setStatus('已是最新','ok'); showToast('远端与本地一致'); return; }
-    const remote=r.state, localNow=$('ta').value, remoteNote=remote.pages[currentId]||'';
-    saveDraft(); await snapshot('sync');
-    state=remote; renderNav();
-    if(localNow!==remoteNote){
-      $('ta').value=localNow; markDirty(true); doRender(); updateStats();
-      openDiff(remoteNote, localNow, '远端(base)', '本地(最新)');
-      setStatus('已拉取远端；本地改动作为最新版本','warn');
-      showToast('远端作为基，本地为最新变更');
-    } else {
-      selectNote(currentId, true);
-      setStatus('已同步远端','ok'); showToast('已同步远端');
+    const remote=await S.remoteNotes(token);
+    const local=stateToNotes();
+    const remoteIds=new Set(remote.map(e=>e.id));
+    const merged=Object.assign({},local);
+    const newCloud={};
+    let pulled=0;
+    for(const e of remote){
+      const m=meta[e.id];
+      let rp;
+      if(m && m.sha===e.sha && m.path===e.path){
+        rp=cloudNotes[e.id]||local[e.id]||{id:e.id,title:'',content:'',order:0,ancestors:S.ancestorsFromPath(e.path)};
+      } else {
+        const text=(await S.fetchNote(e.path)).trim();
+        const p=S.parseNote(await S.decryptText(text));
+        if(!p) continue;
+        rp={id:e.id,title:p.title,content:p.content,order:p.order,ancestors:S.ancestorsFromPath(e.path)};
+        meta[e.id]={sha:e.sha,path:e.path};
+      }
+      newCloud[e.id]=rp;
+      const l=local[e.id], c=cloudNotes[e.id];
+      const locallyChanged=l && c && (l.content!==c.content || l.title!==c.title || l.order!==c.order || JSON.stringify(l.ancestors)!==JSON.stringify(c.ancestors));
+      if(locallyChanged){
+        merged[e.id]=l;
+        if(e.id===currentId && rp.content!==l.content) openDiff(rp.content,l.content,'远端(base)','本地(最新)');
+      } else {
+        merged[e.id]=rp;
+      }
+      if(JSON.stringify(l)!==JSON.stringify(rp)) pulled++;
     }
+    for(const id in local){ if(!remoteIds.has(id)) merged[id]=local[id]; }
+    cloudNotes=newCloud;
+    applyNotes(merged);
+    await S.cachePut('state',state); await S.cachePut('meta',meta); await S.cachePut('cloud',cloudNotes);
+    selectNote(currentId||(state.nav[0]&&state.nav[0].id),true);
+    setStatus(pulled?('已拉取 '+pulled+' 处更新'):'已是最新','ok');
+    showToast(pulled?'已同步远端':'远端与本地一致');
   }catch(e){ setStatus('✗ '+e.message,'err'); }
   finally{ $('btnSync').disabled=false; }
 }
-$('btnSync').onclick = sync;
-document.addEventListener('keydown', e=>{ if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){ e.preventDefault(); save(); } });
+$('btnSync').onclick=sync;
+document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){ e.preventDefault(); save(); } });
 
 /* theme */
 (function(){
@@ -867,51 +762,66 @@ document.addEventListener('keydown', e=>{ if((e.ctrlKey||e.metaKey) && e.key.toL
   $('theme-toggle').onclick=()=>{ const n=get()==='dark'?'light':'dark'; localStorage.setItem(K,n); apply(n); };
 })();
 
-window.addEventListener('beforeunload', e=>{ if(dirty){ saveDraft(); e.preventDefault(); e.returnValue=''; } });
-document.addEventListener('visibilitychange', ()=>{ if(document.hidden && dirty){ saveDraft(); snapshot('background'); } });
-window.addEventListener('hashchange', ()=>{ const id=(location.hash||'').replace(/^#\/?/,''); if(state && id && id!==currentId) selectNote(id); });
+window.addEventListener('beforeunload',e=>{ if(dirty){ saveDraft(); e.preventDefault(); e.returnValue=''; } });
+document.addEventListener('visibilitychange',()=>{ if(document.hidden&&dirty){ saveDraft(); snapshot('background'); } });
+window.addEventListener('hashchange',()=>{ const id=(location.hash||'').replace(/^#\/?/,''); if(state&&id&&id!==currentId) selectNote(id); });
 
-/* gate unlock */
-$('gateForm').onsubmit = async (e)=>{
+/* boot / gate */
+function showGate(){ $('gate').classList.remove('hidden'); $('app').classList.add('hidden'); }
+function showEditor(){
+  $('gate').classList.add('hidden'); $('app').classList.remove('hidden');
+  applySaveUI(); loadVersions();
+  if(!state) applyNotes({});
+  const id=(location.hash||'').replace(/^#\/?/,'')||(state.nav[0]&&state.nav[0].id);
+  selectNote(id,true);
+}
+async function fullLoad(){
+  const remote=await S.remoteNotes(token);
+  const notes={};
+  for(const e of remote){
+    try{
+      const p=S.parseNote(await S.decryptText((await S.fetchNote(e.path)).trim()));
+      if(!p) continue;
+      notes[e.id]={id:e.id,title:p.title,content:p.content,order:p.order,ancestors:S.ancestorsFromPath(e.path)};
+      meta[e.id]={sha:e.sha,path:e.path};
+    }catch(err){ console.warn('跳过',e.path,err); }
+  }
+  cloudNotes=JSON.parse(JSON.stringify(notes));
+  applyNotes(notes);
+  await S.cachePut('state',state); await S.cachePut('meta',meta); await S.cachePut('cloud',cloudNotes);
+}
+
+$('gateForm').onsubmit=async(e)=>{
   e.preventDefault();
   const pw=$('gatePw').value; if(!pw) return;
-  const btn=e.target.querySelector('button[type=submit]'); btn.disabled=true; $('gateMsg').textContent='正在解密…';
+  const btn=e.target.querySelector('button[type=submit]'); btn.disabled=true; $('gateMsg').textContent='正在派生密钥…';
   try{
-    if(!params) await loadParams();
-    aesKey=await deriveKey(pw);
-    const enc=await fetchNotes();
-    const r=interpretPlaintext(await decryptToText(enc));
-    if(!r.state){ $('gateMsg').textContent='密码错误或数据损坏'; btn.disabled=false; return; }
-    try{ await idbPut(IDB_KEY, aesKey); }catch(err){}
-    state=r.state; cloudState=r.state;
+    await S.loadParams();
+    const key=await S.deriveKey(pw);
+    const remote=await S.remoteNotes('');
+    if(remote.length){
+      const p=S.parseNote(await S.decryptText((await S.fetchNote(remote[0].path)).trim()));
+      if(!p){ $('gateMsg').textContent='密码错误或数据损坏'; btn.disabled=false; return; }
+    }
+    try{ await idbPut(IDB_KEY,key); }catch(err){}
     const t=await idbGet(IDB_TOKEN); if(t) token=t;
-    showEditor();
+    await fullLoad(); showEditor();
   }catch(err){ $('gateMsg').textContent='失败：'+err.message; btn.disabled=false; }
 };
 
-function showEditor(){
-  $('gate').classList.add('hidden');
-  $('app').classList.remove('hidden');
-  applySaveUI();
-  loadVersions();
-  const id=(location.hash||'').replace(/^#\/?/,'') || state.nav[0].id;
-  selectNote(id, true);
-}
-
-/* boot */
 (async function(){
   try{
-    if(!params) await loadParams();
+    await S.loadParams();
     const k=await idbGet(IDB_KEY);
-    if(!k){ $('gate').classList.remove('hidden'); return; }
-    aesKey=k;
+    if(!k){ showGate(); return; }
+    S.setKey(k);
     const t=await idbGet(IDB_TOKEN); if(t) token=t;
-    const enc=await fetchNotes();
-    const r=interpretPlaintext(await decryptToText(enc));
-    if(!r.state){ $('gate').classList.remove('hidden'); return; }
-    state=r.state; cloudState=r.state;
-    showEditor();
-  }catch(e){ console.warn(e); $('gate').classList.remove('hidden'); }
+    const cmeta=await S.cacheGet('meta'); if(cmeta) meta=cmeta;
+    const ccloud=await S.cacheGet('cloud'); if(ccloud) cloudNotes=ccloud;
+    const cached=await S.cacheGet('state');
+    if(cached){ state=cached; showEditor(); }
+    else { await fullLoad(); showEditor(); }
+  }catch(e){ console.warn(e); showGate(); }
 })();
 </script>
 </body>
