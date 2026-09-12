@@ -242,7 +242,7 @@ function fmtTime(ms){
 function setLastDecrypt(ms){ const b=$('brand'); if(b) b.textContent='上次解密: '+fmtTime(ms); }
 
 /* key store */
-const IDB_NAME='en-keys',IDB_STORE='keys',IDB_KEY='aes';
+const IDB_NAME='en-keys',IDB_STORE='keys',IDB_KEY='aes',IDB_TOKEN='token';
 function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=()=>r.result.createObjectStore(IDB_STORE); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 async function idbGet(k){ try{ const db=await idbOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }catch(e){ return null; } }
 async function idbPut(k,v){ const db=await idbOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(IDB_STORE,'readwrite').objectStore(IDB_STORE).put(v,k); q.onsuccess=()=>res(); q.onerror=()=>rej(q.error); }); }
@@ -283,7 +283,7 @@ function enterApp(){
 /* load all notes from remote */
 async function loadAll(){
   const t0=performance.now();
-  const remote=await S.remoteNotes('');
+  const remote=await S.remoteNotes(token, true);
   const notes={};
   for(const e of remote){
     try{ const p=S.parseNote(await S.decryptText((await S.fetchNote(e.path)).trim())); if(!p) continue; notes[e.id]={id:e.id,title:p.title,content:p.content,order:p.order,ancestors:S.ancestorsFromPath(e.path)}; }catch(err){ console.warn('跳过',e.path,err); }
@@ -313,12 +313,13 @@ $('unlockForm').onsubmit=async(e)=>{
     await S.loadParams();
     const key=await S.deriveKey(pw);
     $('unlockStatus').textContent='Fetch notes…';
-    const remote=await S.remoteNotes('');
+    const remote=await S.remoteNotes(token, true);
     if(remote.length){
       const p=S.parseNote(await S.decryptText((await S.fetchNote(remote[0].path)).trim()));
       if(!p){ $('arrowIcon').classList.remove('hidden'); $('spinIcon').classList.add('hidden'); $('unlockStatus').classList.add('hidden'); $('pw').disabled=false; $('btnUnlock').disabled=false; $('unlockMsg').textContent=''; scheduleGarbage(); return; }
     }
     try{ await idbPut(IDB_KEY,key); }catch(err){}
+    { const t=await idbGet(IDB_TOKEN); token=t||''; }
     const dt=await loadAll();
     $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
     setLastDecrypt(performance.now()-t0);
@@ -354,6 +355,7 @@ window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||
     const k=await idbGet(IDB_KEY);
     if(!k) return;
     S.setKey(k);
+    { const t=await idbGet(IDB_TOKEN); token=t||''; }
     const t0=performance.now();
     const cached=await S.cacheGet('state');
     if(cached){
