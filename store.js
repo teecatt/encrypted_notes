@@ -62,6 +62,32 @@ export async function decryptText(b64){
   const pt=new Uint8Array(await crypto.subtle.decrypt({name:'AES-CTR',counter:iv,length:128},aesKey,ct));
   return new TextDecoder('utf-8',{fatal:false}).decode(pt);
 }
+/* encrypted names: segment = base64url( iv(16) || AES-CTR(key, id+"\n"+title) ).
+   Same scheme/key as content. Random IV generated once and stored inside the
+   name, so it is stable while reused and two same-title siblings never collide. */
+const bytesToB64url=b=>bytesToB64(b).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const b64urlToBytes=s=>{ s=String(s).replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4) s+='='; return b64ToBytes(s); };
+export async function encryptName(id,title){
+  const data=new TextEncoder().encode(id+'\n'+title);
+  const iv=crypto.getRandomValues(new Uint8Array(16));
+  const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-CTR',counter:iv,length:128},aesKey,data));
+  const out=new Uint8Array(iv.length+ct.length); out.set(iv,0); out.set(ct,iv.length);
+  return bytesToB64url(out);
+}
+export async function decryptName(seg){
+  try{
+    const raw=b64urlToBytes(seg);
+    if(raw.length<17) return null;
+    const pt=new Uint8Array(await crypto.subtle.decrypt({name:'AES-CTR',counter:raw.slice(0,16),length:128},aesKey,raw.slice(16)));
+    const s=new TextDecoder('utf-8',{fatal:false}).decode(pt);
+    const i=s.indexOf('\n');
+    if(i<0) return null;
+    return {id:s.slice(0,i), title:s.slice(i+1)};
+  }catch(e){ return null; }
+}
+export function segmentsFromPath(p){ const parts=p.split('/'); return parts.slice(1,parts.length-1); }
+export function pathFromSegments(segs){ return params.notesDir+'/'+segs.join('/')+'/note'; }
+
 export function packNote(order,title,content){ return params.magic+'\n'+order+'\n'+String(title).replace(/\n/g,' ')+'\n'+content; }
 export function parseNote(text){
   if(typeof text!=='string' || !text.startsWith(params.magic)) return null;
