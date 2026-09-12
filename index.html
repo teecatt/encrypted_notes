@@ -258,10 +258,12 @@ if(window.markdownit){
 }
 
 /* ── time formatting (ns / µs / ms / s) ── */
+function trimNum(n,d){ return String(Number(n.toFixed(d))); }
 function fmtTime(ms){
   if(!isFinite(ms) || ms<=0) return '0 ms';
-  if(ms>=10000) return (ms/1000).toFixed(2)+' s';
-  return (Math.round(ms*1000)/1000)+' ms';
+  if(ms>=10000) return trimNum(ms/1000,2)+' s';
+  if(ms>=10) return Math.round(ms)+' ms';
+  return trimNum(ms,3)+' ms';
 }
 function setLastDecrypt(ms){ lastDecryptMs=ms; const b=$('brand'); if(b) b.textContent='上次解密: '+fmtTime(ms); }
 
@@ -318,6 +320,17 @@ async function decryptToText(enc){
   const iv = b64ToBytes(enc.iv), ct = b64ToBytes(enc.ct);
   const pt = new Uint8Array(await crypto.subtle.decrypt({name:'AES-CTR', counter:iv, length:128}, aesKey, ct));
   return new TextDecoder('utf-8', {fatal:false}).decode(pt);
+}
+async function measureDecrypt(enc){
+  const t0=performance.now();
+  const text=await decryptToText(enc);
+  let dt=performance.now()-t0;
+  if(dt<0.5){
+    const N=200, s=performance.now();
+    for(let i=0;i<N;i++) await decryptToText(enc);
+    dt=(performance.now()-s)/N;
+  }
+  return {text, dt};
 }
 function interpretPlaintext(text){
   if(text.startsWith(params.magic)){
@@ -576,12 +589,10 @@ window.addEventListener('hashchange',()=>{ if(state){ renderPage((location.hash|
     if(t) token=t;
     aesKey=k; remembered=true;
     const enc=await fetchNotes();
-    const a=performance.now();
-    const text=await decryptToText(enc);
-    const decMs=performance.now()-a;
+    const {text, dt}=await measureDecrypt(enc);
     const r=interpretPlaintext(text);
     state=r.state; garbageText=r.garbage;
-    setLastDecrypt(decMs);
+    setLastDecrypt(dt);
     showApp(null);
     showToast('已自动解密');
     enterApp();
