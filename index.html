@@ -327,9 +327,8 @@ async function loadAll(){
 }
 const STAGE_LABEL={params:'参数',key:'密钥',token:'令牌',cache:'缓存',manifest:'列表',names:'名称',fetch:'下载',content:'内容',build:'建树',render:'渲染'};
 function fmtStages(stages){ return Object.entries(stages).filter(([k,v])=>v!==undefined).map(([k,v])=>STAGE_LABEL[k]+' '+fmtTime(v)).join(' · '); }
-function decryptToast(prefix, total, stages){
-  return prefix+' · 总 '+fmtTime(total)+'\n'+fmtStages(stages);
-}
+function sumStages(stages){ return Object.values(stages).reduce((a,b)=>a+(b||0),0); }
+function decryptToast(prefix, stages){ return prefix+' · 总 '+fmtTime(sumStages(stages))+'\n'+fmtStages(stages); }
 function showGarbage(text){
   $('pageTitle').textContent='';
   $('content').innerHTML='<pre class="garbage">'+escapeHtml(text)+'</pre>';
@@ -350,7 +349,6 @@ $('unlockForm').onsubmit=async(e)=>{
   $('btnUnlock').disabled=true; $('pw').disabled=true; $('unlockMsg').textContent='';
   $('arrowIcon').classList.add('hidden'); $('spinIcon').classList.remove('hidden');
   $('unlockStatus').classList.remove('hidden'); $('unlockStatus').textContent='Generate key…';
-  const t0=performance.now();
   try{
     const tp=performance.now();
     await S.loadParams();
@@ -365,14 +363,15 @@ $('unlockForm').onsubmit=async(e)=>{
     const tToken=performance.now()-tt;
     const res=await loadAll();
     $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
-    setLastDecrypt(res.ms);
     garbageMode=(res.parsed===0 && res.garbage!==null);
     const tr=performance.now();
     enterApp();
     const tRender=performance.now()-tr;
     const stages={params:tParams,key:tKey,token:tToken,...res.stages,render:tRender};
-    console.log('[decrypt] total',performance.now()-t0,stages);
-    if(garbageMode) scheduleGarbage(); else showToast(decryptToast('已解密',res.ms,stages),6000);
+    const total=sumStages(stages);
+    setLastDecrypt(total);
+    console.log('[decrypt] total',total,stages);
+    if(garbageMode) scheduleGarbage(); else showToast(decryptToast('已解密',stages),6000);
   }catch(err){
     $('arrowIcon').classList.remove('hidden'); $('spinIcon').classList.add('hidden'); $('unlockStatus').classList.add('hidden');
     $('pw').disabled=false; $('btnUnlock').disabled=false;
@@ -416,7 +415,6 @@ window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||
     const tt=performance.now();
     { const t=await idbGet(IDB_TOKEN); token=t||''; }
     const tToken=performance.now()-tt;
-    const t0=performance.now();
     const tc=performance.now();
     const cached=await S.cacheGet('state');
     const tCache=performance.now()-tc;
@@ -424,26 +422,27 @@ window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||
       garbageMode=false; state=cached;
       $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
       const tr=performance.now(); enterApp(); const tRender=performance.now()-tr;
-      const ms=performance.now()-t0;
-      setLastDecrypt(ms);
       const stages={params:tParams,key:tKey,token:tToken,cache:tCache,render:tRender};
-      console.log('[decrypt] auto(cache)',ms,stages);
-      showToast(decryptToast('已自动解密(缓存)',ms,stages),6000);
+      const total=sumStages(stages);
+      setLastDecrypt(total);
+      console.log('[decrypt] auto(cache)',total,stages);
+      showToast(decryptToast('已自动解密(缓存)',stages),6000);
       const tb=performance.now();
       loadAll().then(res=>{
         enterApp();
         const s2={params:tParams,key:tKey,token:tToken,...res.stages,render:performance.now()-tb};
-        console.log('[decrypt] auto(refresh)',res.ms,s2);
+        console.log('[decrypt] auto(refresh)',sumStages(s2),s2);
       }).catch(()=>{});
     } else {
       const res=await loadAll();
       $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
-      setLastDecrypt(res.ms);
       garbageMode=(res.parsed===0 && res.garbage!==null);
       const tr=performance.now(); enterApp(); const tRender=performance.now()-tr;
       const stages={params:tParams,key:tKey,token:tToken,...res.stages,render:tRender};
-      console.log('[decrypt] auto',res.ms,stages);
-      if(garbageMode) scheduleGarbage(); else showToast(decryptToast('已自动解密',res.ms,stages),6000);
+      const total=sumStages(stages);
+      setLastDecrypt(total);
+      console.log('[decrypt] auto',total,stages);
+      if(garbageMode) scheduleGarbage(); else showToast(decryptToast('已自动解密',stages),6000);
     }
   }catch(e){ console.warn('自动解锁失败',e); }
 })();
