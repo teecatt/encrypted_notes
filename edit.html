@@ -666,16 +666,18 @@ async function save(){
   if(!state){ showToast('尚未解锁或没有数据'); return; }
   const local=stateToNotes();
   /* reuse each note's existing encrypted-name segment while its title is unchanged;
-     regenerate (new random IV) only on create/rename. pre-order => parents first. */
+     regenerate (new random IV) only on create/rename. pre-order => parents first.
+     work on a copy so cancelling the save dialog does not mutate nameSeg. */
+  const nextSeg=Object.assign({},nameSeg);
   for(const id in local){
     const l=local[id];
-    if(nameSeg[id] && cloudNotes[id] && cloudNotes[id].title===l.title) continue;
-    nameSeg[id]=await S.encryptName(id, l.title);
+    if(nextSeg[id] && cloudNotes[id] && cloudNotes[id].title===l.title) continue;
+    nextSeg[id]=await S.encryptName(id, l.title);
   }
   const paths={};
   for(const id in local){
     const l=local[id];
-    paths[id]=S.pathFromSegments(l.ancestors.map(a=>nameSeg[a]).concat([nameSeg[id]]));
+    paths[id]=S.pathFromSegments(l.ancestors.map(a=>nextSeg[a]).concat([nextSeg[id]]));
   }
   const changed=[], removed=[];
   for(const id in local){
@@ -693,6 +695,7 @@ async function save(){
     desc=r.desc;
     if(needToken){ if(!r.token) return; token=r.token; }
   } else { desc=$('descInline').value.trim(); }
+  nameSeg=nextSeg;
   $('btnSave').disabled=true; setStatus('加密并提交中…','warn');
   const base='update: '+changed.length+' 篇笔记 @ '+new Date().toISOString();
   const message=desc?base+'\n\n'+desc:base;
