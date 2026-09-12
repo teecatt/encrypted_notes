@@ -97,6 +97,8 @@ html.dark .i-sun{display:none}
 .pw-input{width:100%;margin-top:18px;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:14px;text-align:center;outline:none}
 .pw-input:focus{border-color:var(--fg)}
 html.dark .pw-input{background:#0d0d0d}
+#pw{background:rgba(0,0,0,.7);color:#fff}
+#pw::placeholder{color:rgba(255,255,255,.55)}
 .unlock-btn{width:52px;height:52px;margin:20px auto 0;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--fg);transition:border-color .15s}
 .unlock-btn:hover{border-color:var(--fg)}
 .unlock-btn svg{width:22px;height:22px}
@@ -190,9 +192,9 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
 <div id="garbageModal" class="hidden overlay">
   <div class="card">
     <h2><svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px"><path d="M13,13H11V7H13M13,17H11V15H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"/></svg> 检测到乱码</h2>
-    <p>检测到解密结果为人类无法阅读的乱码。</p>
-    <p style="color:var(--muted)">当前页面为仅 demo 演示，真实密码为 <code>password</code>，可点击右上角清空旧密钥按钮重新输入密码。</p>
-    <p style="color:var(--muted)">关于涉及的技术细节可点击右上角帮助。</p>
+    <p>解密结果为人类不可读的乱码。当前页面仅为 demo 演示，测试密钥为 <code>password</code>。</p>
+    <p style="color:var(--muted)">可点击右上角清空旧密钥后重新输入密钥。</p>
+    <p style="color:var(--muted)">涉及的技术细节可点击右上角帮助。</p>
     <div class="card-actions"><button id="garbageClose" class="btn btn-primary">关闭</button></div>
   </div>
 </div>
