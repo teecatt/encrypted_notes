@@ -696,6 +696,13 @@ async function save(){
       const m=meta[id];
       if(m){ try{ await S.deletePath(m.path,m.sha,token,message); }catch(e){} delete meta[id]; }
     }
+    // maintain structure manifest only when note paths changed
+    try{
+      const paths=Object.values(local).map(n=>S.notePath(n.id,n.ancestors)).sort();
+      const man=await S.readManifest();
+      const cur=man&&Array.isArray(man.notes)?man.notes.slice().sort():null;
+      if(!cur || JSON.stringify(cur)!==JSON.stringify(paths)) await S.putManifest({v:1,notes:paths}, token, message);
+    }catch(e){ console.warn('manifest 更新失败',e); }
     cloudNotes=local;
     await S.cachePut('state',state); await S.cachePut('meta',meta); await S.cachePut('cloud',cloudNotes);
     clearDraft(currentId); cancelAutosave(); markDirty(false); updateAutosaveInfo();
