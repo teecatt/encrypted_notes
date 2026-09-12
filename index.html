@@ -287,19 +287,23 @@ async function loadAll(){
   let list;
   if(man && Array.isArray(man.notes)){ list=man.notes.map(p=>({path:p, id:S.idFromPath(p)})); }
   else { list=await S.remoteNotes(token, true); }
-  const notes={}; let garbage=null;
+  const notes={}; let garbage=null, parsed=0; const orderCounter={};
   for(const e of list){
+    const anc=S.ancestorsFromPath(e.path);
+    const parent=anc.length?anc[anc.length-1]:'';
+    const order=(orderCounter[parent]=(orderCounter[parent]||0)+1)-1;
     try{
       const dec=await S.decryptText((await S.fetchNote(e.path)).trim());
       const p=S.parseNote(dec);
-      if(!p){ if(garbage===null) garbage=dec; continue; }
-      notes[e.id]={id:e.id,title:p.title,content:p.content,order:p.order,ancestors:S.ancestorsFromPath(e.path)};
+      if(!p){ if(garbage===null) garbage=dec; notes[e.id]={id:e.id,title:e.id,content:dec,order,ancestors:anc}; continue; }
+      parsed++;
+      notes[e.id]={id:e.id,title:p.title,content:p.content,order:p.order,ancestors:anc};
     }catch(err){ console.warn('跳过',e.path,err); }
   }
   state={nav:S.buildNav(notes),pages:{}};
   Object.values(notes).forEach(n=>{ state.pages[n.id]=n.content||''; });
-  await S.cachePut('state',state);
-  return {ms:performance.now()-t0, garbage};
+  if(parsed>0) await S.cachePut('state',state);
+  return {ms:performance.now()-t0, garbage, parsed};
 }
 function showGarbage(text){
   $('pageTitle').textContent='';
@@ -331,8 +335,8 @@ $('unlockForm').onsubmit=async(e)=>{
     const res=await loadAll();
     $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
     setLastDecrypt(res.ms);
-    if(res.garbage!==null && !Object.keys(state.pages||{}).length){ showGarbage(res.garbage); scheduleGarbage(); }
-    else { showToast('已解密'); enterApp(); }
+    if(res.parsed===0 && res.garbage!==null) scheduleGarbage(); else showToast('已解密');
+    enterApp();
   }catch(err){
     $('arrowIcon').classList.remove('hidden'); $('spinIcon').classList.add('hidden'); $('unlockStatus').classList.add('hidden');
     $('pw').disabled=false; $('btnUnlock').disabled=false;
@@ -366,7 +370,7 @@ window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||
     { const t=await idbGet(IDB_TOKEN); token=t||''; }
     const t0=performance.now();
     const cached=await S.cacheGet('state');
-    if(cached){
+    if(cached && cached.nav && cached.nav.length){
       state=cached;
       $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
       setLastDecrypt(performance.now()-t0); showToast('已自动解密 · '+fmtTime(performance.now()-t0)); enterApp();
@@ -375,8 +379,8 @@ window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||
       const res=await loadAll();
       $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
       setLastDecrypt(res.ms);
-      if(res.garbage!==null && !Object.keys(state.pages||{}).length){ showGarbage(res.garbage); scheduleGarbage(); }
-      else { showToast('已自动解密 · '+fmtTime(res.ms)); enterApp(); }
+      if(res.parsed===0 && res.garbage!==null) scheduleGarbage(); else showToast('已自动解密 · '+fmtTime(res.ms));
+      enterApp();
     }
   }catch(e){ console.warn('自动解锁失败',e); }
 })();
