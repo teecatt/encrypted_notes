@@ -16,11 +16,26 @@ export const setKey=k=>{ aesKey=k; };
 
 export async function loadParams(){
   if(params) return params;
+  const cached=await cacheGet('params');
+  if(cached && cached.salt && cached.magic){
+    params=cached;
+    params.notesDir=params.notesDir||'notes';
+    refreshParams(); // revalidate in background; never blocks a render
+    return params;
+  }
+  return await fetchParams();
+}
+async function fetchParams(){
   const r=await fetch(PARAMS_URL,{cache:'no-store'});
   if(!r.ok) throw new Error('params 加载失败 '+r.status);
-  params=await r.json();
-  params.notesDir=params.notesDir||'notes';
+  const j=await r.json();
+  j.notesDir=j.notesDir||'notes';
+  params=j;
+  try{ await cachePut('params',j); }catch(e){}
   return params;
+}
+function refreshParams(){
+  fetch(PARAMS_URL,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{ if(j&&j.salt) cachePut('params',j); }).catch(()=>{});
 }
 
 const hexToBytes=h=>{ const a=new Uint8Array(h.length/2); for(let i=0;i<a.length;i++)a[i]=parseInt(h.substr(i*2,2),16); return a; };
@@ -172,7 +187,14 @@ export async function putNote(path, b64text, sha, token, message){
   return j.content&&j.content.sha;
 }
 export async function deletePath(path, sha, token, message){
-  await gh('DELETE','/contents/'+path,{message, sha, branch:BRANCH},token);
+  if(!sha){ try{ const cur=await gh('GET','/contents/'+path+'?ref='+BRANCH,null,token); sha=cur&&cur.sha; }catch(e){} }
+  try{ await gh('DELETE','/contents/'+path,{message, sha, branch:BRANCH},token); }
+  catch(e){
+    // stale/missing sha -> refetch and retry once
+    const cur=await gh('GET','/contents/'+path+'?ref='+BRANCH,null,token).catch(()=>null);
+    if(cur&&cur.sha){ await gh('DELETE','/contents/'+path,{message, sha:cur.sha, branch:BRANCH},token); }
+    else throw e;
+  }
 }
 
 /* local cache (IndexedDB) */

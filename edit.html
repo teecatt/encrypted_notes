@@ -288,11 +288,11 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script type="module">
-import * as S from './store.js?v=4';
+import * as S from './store.js?v=5';
 
 const $ = id => document.getElementById(id);
 let state=null, cloudNotes={}, meta={}, nameSeg={}, token='', currentId=null, dirty=false;
-const SCHEMA=3;
+const SCHEMA=4;
 
 const escapeHtml=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
@@ -582,8 +582,9 @@ $('ntOutdent').onclick=()=>{
 
 /* note selection */
 function selectNote(id,skipConfirm){
+  if(!state.pages) state.pages={};
   if(!id){ currentId=null; $('ta').value=''; doRender(); return; }
-  if(!state.pages[id]) id=state.nav[0]&&state.nav[0].id;
+  if(state.pages[id]===undefined) id=state.nav[0]&&state.nav[0].id;
   if(!skipConfirm && dirty && currentId && !confirm('当前笔记有未保存的修改，仍要切换吗？')){ renderNav(); return; }
   if(currentId&&dirty){ saveDraft(); snapshot('switch'); }
   cancelAutosave();
@@ -847,20 +848,27 @@ $('gateForm').onsubmit=async(e)=>{
 
 (async function(){
   try{
-    await S.loadParams();
     const k=await idbGet(IDB_KEY);
     if(!k){ showGate(); return; }
     S.setKey(k);
     const t=await idbGet(IDB_TOKEN); if(t) token=t;
-    const schema=await S.cacheGet('schema');
-    if(schema===SCHEMA){
-      const cmeta=await S.cacheGet('meta'); if(cmeta) meta=cmeta;
-      const ccloud=await S.cacheGet('cloud'); if(ccloud) cloudNotes=ccloud;
-      const cns=await S.cacheGet('nameSeg'); if(cns) nameSeg=cns;
-      const cached=await S.cacheGet('state');
-      if(cached && cached.nav){ state=cached; showEditor(); return; }
+    const [cmeta,ccloud,cns,cached,schema]=await Promise.all([
+      S.cacheGet('meta'), S.cacheGet('cloud'), S.cacheGet('nameSeg'), S.cacheGet('state'), S.cacheGet('schema')
+    ]);
+    if(cmeta) meta=cmeta;
+    if(ccloud) cloudNotes=ccloud;
+    if(cns) nameSeg=cns;
+    if(schema!==SCHEMA){ try{ await vClear(); versions=[]; }catch(e){} }
+    await S.loadParams(); // cached in IndexedDB -> no network round-trip
+    /* cached: open the current note immediately, do NOT reload the tree.
+       remote refresh is left to the viewer's background load or the Sync button. */
+    if(schema===SCHEMA && cached && cached.nav && ccloud){
+      state=cached;
+      showEditor();
+      return;
     }
-    try{ await fullLoad(); }catch(err){ console.warn('拉取失败',err); applyNotes({}); } showEditor();
+    try{ await fullLoad(); }catch(err){ console.warn('拉取失败',err); applyNotes({}); }
+    showEditor();
   }catch(e){ console.warn(e); showGate(); }
 })();
 </script>

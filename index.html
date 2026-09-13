@@ -200,9 +200,10 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
 </div>
 
 <script type="module">
-import * as S from './store.js?v=4';
+import * as S from './store.js?v=5';
 
 const $ = id => document.getElementById(id);
+const SCHEMA=4;
 let state=null, currentId=null, token='', garbageMode=false, garbageIds=new Set();
 const escapeHtml=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
@@ -288,10 +289,11 @@ async function loadAll(){
   const man=await S.readManifest();
   let list;
   if(man && Array.isArray(man.notes)){ list=man.notes.map(p=>({path:p})); }
-  else { list=(await S.remoteNotes(token, true)).map(e=>({path:e.path})); }
+  else { list=(await S.remoteNotes(token, true)).map(e=>({path:e.path, sha:e.sha})); }
   const tMan=performance.now()-tMan0;
   garbageIds=new Set();
-  const notes={}; let garbage=null, parsed=0; const orderCounter={};
+  const notes={}; let garbage=null, parsed=0;
+  const cloud={}, meta={}, nameSeg={};
   let tName=0, tFetch=0, tDec=0;
   for(const e of list){
     const tn=performance.now();
@@ -300,8 +302,8 @@ async function loadAll(){
     const self=info;
     const anc=(info.ancestors||[]).slice();
     tName+=performance.now()-tn;
-    const parent=anc.length?anc[anc.length-1]:'';
-    const order=(orderCounter[parent]=(orderCounter[parent]||0)+1)-1;
+    nameSeg[self.id]=seg;
+    meta[self.id]={path:e.path, sha:(e.sha&&/^[0-9a-f]{40}$/.test(e.sha))?e.sha:null};
     try{
       const tf=performance.now();
       const raw=(await S.fetchNote(e.path)).trim();
@@ -310,21 +312,28 @@ async function loadAll(){
       const dec=await S.decryptText(raw);
       const p=S.parseNote(dec);
       tDec+=performance.now()-td;
-      if(!p){ if(garbage===null) garbage=dec; garbageIds.add(self.id); notes[self.id]={id:self.id,title:self.title,content:dec,order,ancestors:anc}; continue; }
+      if(!p){ if(garbage===null) garbage=dec; garbageIds.add(self.id); notes[self.id]={id:self.id,title:self.title,content:dec,order:0,ancestors:anc}; continue; }
       parsed++;
       notes[self.id]={id:self.id,title:self.title,content:p.content,order:p.order,ancestors:anc};
     }catch(err){ console.warn('跳过',e.path,err); }
   }
   const tb=performance.now();
+  Object.values(notes).forEach(n=>{ cloud[n.id]={id:n.id,title:n.title,content:n.content||'',order:n.order||0,ancestors:(n.ancestors||[]).slice()}; });
   state={nav:S.buildNav(notes),pages:{}};
   Object.values(notes).forEach(n=>{ state.pages[n.id]=n.content||''; });
   const tBuild=performance.now()-tb;
-  if(parsed>0) await S.cachePut('state',state);
+  if(parsed>0){
+    await S.cachePut('state',state);
+    await S.cachePut('cloud',cloud);
+    await S.cachePut('meta',meta);
+    await S.cachePut('nameSeg',nameSeg);
+    await S.cachePut('schema',SCHEMA);
+  }
   const stages={manifest:tMan,names:tName,fetch:tFetch,content:tDec,build:tBuild};
   return {ms:performance.now()-t0, garbage, parsed, stages};
 }
 const STAGE_LABEL={params:'参数',key:'密钥',token:'令牌',cache:'缓存',manifest:'列表',names:'名称',fetch:'下载',content:'内容',build:'建树',render:'渲染'};
-function fmtStages(stages){ return Object.entries(stages).filter(([k,v])=>v!==undefined).map(([k,v])=>STAGE_LABEL[k]+' '+fmtTime(v)).join(' · '); }
+function fmtStages(stages){ return Object.entries(stages).filter(([k,v])=>v!==undefined).map(([k,v])=>STAGE_LABEL[k]+' '+fmtTime(v)).join('\n'); }
 function sumStages(stages){ return Object.values(stages).reduce((a,b)=>a+(b||0),0); }
 function decryptToast(prefix, stages){ return prefix+' · 总 '+fmtTime(sumStages(stages))+'\n'+fmtStages(stages); }
 function showGarbage(text){
@@ -369,7 +378,8 @@ $('unlockForm').onsubmit=async(e)=>{
     const total=sumStages(stages);
     setLastDecrypt(total);
     console.log('[decrypt] total',total,stages);
-    if(garbageMode) scheduleGarbage(); else showToast(decryptToast('已解密',stages),6000);
+    if(garbageMode){ showToast(decryptToast('解密异常（密码错误或数据损坏）',stages),8000); scheduleGarbage(); }
+    else showToast(decryptToast('已解密',stages),6000);
   }catch(err){
     $('arrowIcon').classList.remove('hidden'); $('spinIcon').classList.add('hidden'); $('unlockStatus').classList.add('hidden');
     $('pw').disabled=false; $('btnUnlock').disabled=false;
@@ -402,9 +412,6 @@ window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||
 /* auto-unlock with cached key */
 (async function(){
   try{
-    const tp=performance.now();
-    await S.loadParams();
-    const tParams=performance.now()-tp;
     const tk=performance.now();
     const k=await idbGet(IDB_KEY);
     const tKey=performance.now()-tk;
@@ -417,21 +424,30 @@ window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||
     const cached=await S.cacheGet('state');
     const tCache=performance.now()-tc;
     if(cached && cached.nav && cached.nav.length){
+      /* instant path: key + plaintext already cached; no params fetch, no Argon2 */
       garbageMode=false; state=cached;
       $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
       const tr=performance.now(); enterApp(); const tRender=performance.now()-tr;
-      const stages={params:tParams,key:tKey,token:tToken,cache:tCache,render:tRender};
+      const stages={key:tKey,token:tToken,cache:tCache,render:tRender};
       const total=sumStages(stages);
       setLastDecrypt(total);
       console.log('[decrypt] auto(cache)',total,stages);
       showToast(decryptToast('已自动解密(缓存)',stages),6000);
-      const tb=performance.now();
-      loadAll().then(res=>{
-        enterApp();
-        const s2={params:tParams,key:tKey,token:tToken,...res.stages,render:performance.now()-tb};
-        console.log('[decrypt] auto(refresh)',sumStages(s2),s2);
-      }).catch(()=>{});
+      /* refresh in the background; never blocks the first paint */
+      (async()=>{
+        try{
+          const tp=performance.now();
+          await S.loadParams();
+          const res=await loadAll();
+          if(currentId) renderPage(currentId);
+          const s2={params:performance.now()-tp,...res.stages};
+          console.log('[decrypt] auto(refresh)',sumStages(s2),s2);
+        }catch(e){ console.warn('后台刷新失败',e); }
+      })();
     } else {
+      const tp=performance.now();
+      await S.loadParams();
+      const tParams=performance.now()-tp;
       const res=await loadAll();
       $('unlock').classList.add('hidden'); $('app').classList.remove('hidden');
       garbageMode=(res.parsed===0 && res.garbage!==null);
@@ -440,7 +456,8 @@ window.addEventListener('hashchange',()=>{ if(state) renderPage((location.hash||
       const total=sumStages(stages);
       setLastDecrypt(total);
       console.log('[decrypt] auto',total,stages);
-      if(garbageMode) scheduleGarbage(); else showToast(decryptToast('已自动解密',stages),6000);
+      if(garbageMode){ showToast(decryptToast('解密异常（密码错误或数据损坏）',stages),8000); scheduleGarbage(); }
+      else showToast(decryptToast('已自动解密',stages),6000);
     }
   }catch(e){ console.warn('自动解锁失败',e); }
 })();
