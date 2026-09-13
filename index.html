@@ -237,7 +237,7 @@ function trimNum(n,d){ return String(Number(n.toFixed(d))); }
 function fmtTime(ms){
   if(!isFinite(ms)||ms<=0) return '0 ms';
   if(ms>=10000) return trimNum(ms/1000,2)+' s';
-  if(ms>=10) return trimNum(ms,1)+' ms';
+  if(ms>=10) return ms.toFixed(1)+' ms';
   return trimNum(ms,3)+' ms';
 }
 function setLastDecrypt(ms){ const b=$('brand'); if(b) b.textContent='上次解密: '+fmtTime(ms); }
