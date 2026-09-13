@@ -40,9 +40,6 @@ html.dark .i-sun{display:none}
 .brand{font-size:14px;font-weight:700;white-space:nowrap}
 .dirty-dot{width:8px;height:8px;border-radius:50%;background:#eab308;flex:0 0 auto}
 .spacer{flex:1 1 auto}
-.desc-inline{width:170px;padding:7px 10px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:13px;outline:none}
-.desc-inline:focus{border-color:var(--fg)}
-@media(max-width:640px){.desc-inline{width:110px}}
 #app{display:flex;flex-direction:column;height:100vh}
 
 /* layout */
@@ -118,6 +115,7 @@ html.dark .pw-input{background:#0d0d0d}
 #gatePw{background:var(--bg);color:var(--fg)}
 #gatePw::placeholder{color:var(--muted)}
 .overlay{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:20px}
+#saveModal{z-index:92}
 .card{width:100%;max-width:400px;background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow)}
 .card h2{margin:0 0 10px;font-size:16px;display:flex;align-items:center;gap:8px}
 .card p{margin:.5em 0;font-size:13px;color:var(--muted)}
@@ -150,6 +148,36 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
 .diff-add{background:rgba(34,197,94,.16)}
 .diff-del{background:rgba(229,72,77,.16)}
 .diff-sign{display:inline-block;width:1.1em;color:var(--muted);user-select:none}
+
+/* sync / compare panel */
+.sync-card{max-width:1040px;width:100%;height:84vh;display:flex;flex-direction:column;padding:0}
+.sync-card h2{padding:14px 18px 0;margin:0 0 10px}
+.sync-sum{font-size:12px;font-weight:400;color:var(--muted);margin-left:6px}
+.sync-body{flex:1 1 auto;display:flex;min-height:0;border-top:1px solid var(--line)}
+.sync-list{width:260px;flex:0 0 260px;overflow-y:auto;border-right:1px solid var(--line);padding:8px}
+.sync-item{padding:7px 9px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--muted);display:flex;gap:7px;align-items:center}
+.sync-item:hover{background:var(--hover)}
+.sync-item.sel{background:var(--hover);color:var(--fg)}
+.sync-item .st{font-size:10px;padding:1px 5px;border-radius:5px;border:1px solid var(--line);flex:0 0 auto}
+.sync-item .nm{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-local{color:#eab308;border-color:#eab308}
+.st-remote{color:#3b82f6;border-color:#3b82f6}
+.st-diff{color:#e5484d;border-color:#e5484d}
+.sync-diff{flex:1 1 auto;min-width:0;display:flex;flex-direction:column}
+.sync-diff-labels{padding:8px 12px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line)}
+.sync-diff .diff-body{border:0;border-radius:0;flex:1 1 auto;min-height:80px}
+.sync-choice{display:flex;gap:18px;padding:8px 12px;border-top:1px solid var(--line);font-size:13px;align-items:center;flex-wrap:wrap}
+.sync-choice label{display:flex;align-items:center;gap:5px;cursor:pointer}
+.sync-empty{color:var(--muted);font-size:13px;padding:20px}
+.sync-actions{display:flex;gap:8px;align-items:center;padding:12px 16px;border-top:1px solid var(--line);flex-wrap:wrap}
+.sync-actions .sp{flex:1 1 auto}
+#syncDesc{flex:0 1 240px;padding:7px 10px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:13px;outline:none}
+#syncDesc:focus{border-color:var(--fg)}
+@media(max-width:760px){
+  .sync-body{flex-direction:column}
+  .sync-list{width:100%;flex:0 0 auto;max-height:34%;border-right:0;border-bottom:1px solid var(--line)}
+  #syncDesc{flex:1 1 100%}
+}
 </style>
 </head>
 <body>
@@ -174,9 +202,7 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
     <span class="brand">编辑</span>
     <span id="dirtyDot" class="dirty-dot hidden" title="有未保存的修改"></span>
     <span class="spacer"></span>
-    <input id="descInline" class="desc-inline hidden" placeholder="提交描述（可选）" title="提交描述（可选）">
-    <button id="btnSave" class="btn btn-primary" title="保存到 dev（Ctrl/Cmd+S）"><svg viewBox="0 0 24 24" fill="currentColor" style="width:17px;height:17px"><path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z"/></svg><span>保存</span></button>
-    <button id="btnSync" class="icon-btn" title="从远端同步并解密" aria-label="同步"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12,18A6,6 0 0,1 6,12C6,11 6.25,10.03 6.7,9.2L5.24,7.74C4.46,8.97 4,10.43 4,12A8,8 0 0,0 12,20V23L16,19L12,15M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12C18,13 17.75,13.97 17.3,14.8L18.76,16.26C19.54,15.03 20,13.57 20,12A8,8 0 0,0 12,4Z"/></svg></button>
+    <button id="btnSync" class="icon-btn" title="同步 / 对比云端与本地（Ctrl/Cmd+S）" aria-label="同步对比"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12,18A6,6 0 0,1 6,12C6,11 6.25,10.03 6.7,9.2L5.24,7.74C4.46,8.97 4,10.43 4,12A8,8 0 0,0 12,20V23L16,19L12,15M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12C18,13 17.75,13.97 17.3,14.8L18.76,16.26C19.54,15.03 20,13.57 20,12A8,8 0 0,0 12,4Z"/></svg></button>
     <button id="btnSettings" class="icon-btn" title="设置" aria-label="设置"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></svg></button>
     <button id="theme-toggle" class="icon-btn" title="主题" aria-label="主题"><svg class="i-sun" viewBox="0 -960 960 960" fill="currentColor"><path d="M480-360q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35Zm0 80q-83 0-141.5-58.5T280-480q0-83 58.5-141.5T480-680q83 0 141.5 58.5T680-480q0 83-58.5 141.5T480-280ZM80-440q-17 0-28.5-11.5T40-480q0-17 11.5-28.5T80-520h80q17 0 28.5 11.5T200-480q0 17-11.5 28.5T160-440H80Zm720 0q-17 0-28.5-11.5T760-480q0-17 11.5-28.5T800-520h80q17 0 28.5 11.5T920-480q0 17-11.5 28.5T880-440h-80ZM480-760q-17 0-28.5-11.5T440-800v-80q0-17 11.5-28.5T480-920q17 0 28.5 11.5T520-880v80q0 17-11.5 28.5T480-760Zm0 720q-17 0-28.5-11.5T440-80v-80q0-17 11.5-28.5T480-200q17 0 28.5 11.5T520-160v80q0 17-11.5 28.5T480-40ZM226-678l-43-42q-12-11-11.5-28t11.5-29q12-12 29-12t28 12l42 43q11 12 11 28t-11 28q-11 12-27.5 11.5T226-678Zm494 495-42-43q-11-12-11-28.5t11-27.5q11-12 27.5-11.5T734-282l43 42q12 11 11.5 28T777-183q-12 12-29 12t-28-12Zm-42-495q-12-11-11.5-27.5T678-734l42-43q11-12 28-11.5t29 11.5q12 12 12 29t-12 28l-43 42q-12 11-28 11t-28-11ZM183-183q-12-12-12-29t12-28l43-42q12-11 28.5-11t27.5 11q12 11 11.5 27.5T282-226l-42 43q-11 12-28 11.5T183-183Zm297-297Z"/></svg><svg class="i-moon" viewBox="0 -960 960 960" fill="currentColor"><path d="M480-120q-151 0-255.5-104.5T120-480q0-138 90-239.5T440-838q13-2 23 3.5t16 14.5q6 9 6.5 21t-7.5 23q-17 26-25.5 55t-8.5 61q0 90 63 153t153 63q31 0 61.5-9t54.5-25q11-7 22.5-6.5T819-479q10 5 15.5 15t3.5 24q-14 138-117.5 229T480-120Zm0-80q88 0 158-48.5T740-375q-20 5-40 8t-40 3q-123 0-209.5-86.5T364-660q0-20 3-40t8-40q-78 32-126.5 102T200-480q0 116 82 198t198 82Zm-10-270Z"/></svg></button>
     <a class="icon-btn" href="https://down2.top/encrypted_params/about.html" target="_blank" rel="noopener" title="关于加密技术细节" aria-label="帮助"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10,19H13V22H10V19M12,2C17.35,2.22 19.68,7.62 16.5,11.67C15.67,12.67 14.33,13.33 13.67,14.17C13,15 13,16 13,17H10C10,15.33 10,13.92 10.67,12.92C11.33,11.92 12.67,11.33 13.5,10.67C15.92,8.43 15.32,5.26 12,5A3,3 0 0,0 9,8H6A6,6 0 0,1 12,2Z"/></svg></a>
@@ -244,12 +270,6 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
       <label>超时时间（秒，1 – 86400）</label>
       <input id="asSeconds" type="number" min="1" max="86400" step="1">
     </div>
-    <div class="setting">
-      <label>保存时</label>
-      <div class="row">
-        <label><input type="checkbox" id="skipDesc"> 跳过描述弹窗（改为在保存按钮旁显示描述输入框）</label>
-      </div>
-    </div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button type="button" id="setCancel" class="btn" style="flex:1">取消</button>
       <button type="submit" class="btn btn-primary" style="flex:1">保存</button>
@@ -282,6 +302,33 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
     <h2>版本对比 <span id="diffLabels" style="font-size:12px;font-weight:400;color:var(--muted);margin-left:6px"></span></h2>
     <div id="diffBody" class="diff-body"></div>
     <div style="margin-top:12px;display:flex;justify-content:flex-end"><button id="diffClose" class="btn">关闭</button></div>
+  </div>
+</div>
+
+<!-- Sync / compare -->
+<div id="syncModal" class="hidden overlay">
+  <div class="card sync-card">
+    <h2>同步 / 对比 <span id="syncSummary" class="sync-sum"></span></h2>
+    <div class="sync-body">
+      <div id="syncList" class="sync-list"></div>
+      <div class="sync-diff">
+        <div id="syncDiffLabels" class="sync-diff-labels"></div>
+        <div id="syncDiffBody" class="diff-body"></div>
+        <div id="syncChoice" class="sync-choice hidden">
+          <span>当前笔记：</span>
+          <label><input type="radio" name="syncChoice" value="local"> 保留本地</label>
+          <label><input type="radio" name="syncChoice" value="remote"> 采用云端</label>
+        </div>
+      </div>
+    </div>
+    <div class="sync-actions">
+      <input id="syncDesc" placeholder="提交描述（可选）">
+      <span class="sp"></span>
+      <button id="syncRefresh" class="btn">重新拉取</button>
+      <button id="syncTakeRemote" class="btn">用云端覆盖本地</button>
+      <button id="syncCommit" class="btn btn-primary">提交到云端</button>
+      <button id="syncClose" class="btn">关闭</button>
+    </div>
   </div>
 </div>
 
@@ -438,9 +485,8 @@ function draftKey(id){ return 'en-draft:'+id; }
 function loadDraft(id){ try{ const d=JSON.parse(localStorage.getItem(draftKey(id))||'null'); return d&&typeof d.c==='string'?d:null; }catch(e){ return null; } }
 function clearDraft(id){ try{ localStorage.removeItem(draftKey(id)); }catch(e){} }
 let autosaveCfg=loadCfg();
-function loadCfg(){ try{ const c=JSON.parse(localStorage.getItem('en-autosave')||'{}'); return {mode:(c.mode==='timeout'?'timeout':'blur'),seconds:Math.min(86400,Math.max(1,parseInt(c.seconds,10)||30)),skipDesc:!!c.skipDesc}; }catch(e){ return {mode:'blur',seconds:30,skipDesc:false}; } }
+function loadCfg(){ try{ const c=JSON.parse(localStorage.getItem('en-autosave')||'{}'); return {mode:(c.mode==='timeout'?'timeout':'blur'),seconds:Math.min(86400,Math.max(1,parseInt(c.seconds,10)||30))}; }catch(e){ return {mode:'blur',seconds:30}; } }
 function saveCfg(c){ autosaveCfg=c; try{ localStorage.setItem('en-autosave',JSON.stringify(c)); }catch(e){} }
-function applySaveUI(){ const el=$('descInline'); if(el) el.classList.toggle('hidden',!autosaveCfg.skipDesc); }
 let autosaveTimer=null;
 function cancelAutosave(){ if(autosaveTimer){ clearTimeout(autosaveTimer); autosaveTimer=null; } }
 function scheduleAutosave(){ if(autosaveCfg.mode==='blur') return; cancelAutosave(); autosaveTimer=setTimeout(()=>{ autosaveTimer=null; saveDraft(); snapshot('draft'); },autosaveCfg.seconds*1000); }
@@ -630,7 +676,6 @@ $('btnSettings').onclick=()=>{
   document.querySelector(`input[name=asmode][value="${autosaveCfg.mode}"]`).checked=true;
   $('asSeconds').value=autosaveCfg.seconds;
   $('asSeconds').disabled=autosaveCfg.mode!=='timeout';
-  $('skipDesc').checked=autosaveCfg.skipDesc;
   $('settingsModal').classList.remove('hidden');
 };
 document.querySelectorAll('input[name=asmode]').forEach(r=>r.onchange=()=>{ $('asSeconds').disabled=document.querySelector('input[name=asmode]:checked').value!=='timeout'; });
@@ -640,9 +685,9 @@ $('settingsForm').onsubmit=(e)=>{
   const mode=document.querySelector('input[name=asmode]:checked').value;
   let sec=parseInt($('asSeconds').value,10); if(!isFinite(sec)) sec=30;
   sec=Math.min(86400,Math.max(1,sec));
-  saveCfg({mode,seconds:sec,skipDesc:$('skipDesc').checked});
+  saveCfg({mode,seconds:sec});
   cancelAutosave(); scheduleAutosave();
-  $('settingsModal').classList.add('hidden'); applySaveUI(); updateAutosaveInfo(); showToast('设置已保存');
+  $('settingsModal').classList.add('hidden'); updateAutosaveInfo(); showToast('设置已保存');
 };
 
 /* save / sync */
@@ -669,12 +714,14 @@ $('saveForm').onsubmit=(e)=>{
 };
 $('saveCancel').onclick=()=>{ $('saveModal').classList.add('hidden'); if(saveResolver){ saveResolver(null); saveResolver=null; } };
 
-async function save(){
-  if(!state){ showToast('尚未解锁或没有数据'); return; }
-  const local=stateToNotes();
+/* ── push the given (or current) notes to dev, then clear local history ── */
+async function save(opts){
+  opts=opts||{};
+  if(!state){ showToast('尚未解锁或没有数据'); return false; }
+  const local=opts.notes||stateToNotes();
   /* reuse each note's existing encrypted-name segment while its title is unchanged;
      regenerate (new random IV) only on create/rename. pre-order => parents first.
-     work on a copy so cancelling the save dialog does not mutate nameSeg. */
+     work on a copy so a cancelled token prompt does not mutate nameSeg. */
   const nextSeg=Object.assign({},nameSeg);
   for(const id in local){
     const l=local[id], c=cloudNotes[id];
@@ -690,17 +737,18 @@ async function save(){
     if(!same) changed.push(l);
   }
   for(const id in cloudNotes){ if(!local[id]) removed.push(id); }
-  if(!changed.length && !removed.length){ showToast('没有更改，无需保存'); return; }
-  let desc='';
-  const needDesc=!autosaveCfg.skipDesc, needToken=!token;
+  if(!changed.length && !removed.length){ if(!opts.silent) showToast('没有更改，无需提交'); return true; }
+  let desc=opts.desc||'';
+  const needDesc=opts.desc===undefined;
+  const needToken=!token;
   if(needDesc||needToken){
     const r=await askSave(needDesc,needToken);
-    if(!r) return;
-    desc=r.desc;
-    if(needToken){ if(!r.token) return; token=r.token; }
-  } else { desc=$('descInline').value.trim(); }
+    if(!r) return false;
+    if(needDesc) desc=r.desc;
+    if(needToken){ if(!r.token) return false; token=r.token; }
+  }
   nameSeg=nextSeg;
-  $('btnSave').disabled=true; setStatus('加密并提交中…','warn');
+  setStatus('加密并提交中…','warn');
   const base='update: '+changed.length+' 篇笔记 @ '+new Date().toISOString();
   const message=desc?base+'\n\n'+desc:base;
   try{
@@ -716,7 +764,6 @@ async function save(){
       const m=meta[id];
       if(m){ try{ await S.deletePath(m.path,m.sha,token,message); }catch(e){} delete meta[id]; delete nameSeg[id]; }
     }
-    // maintain structure manifest only when note paths changed
     try{
       const allPaths=Object.values(paths).sort();
       const man=await S.readManifest();
@@ -726,64 +773,180 @@ async function save(){
     cloudNotes=local;
     await S.cachePut('state',state); await S.cachePut('meta',meta); await S.cachePut('cloud',cloudNotes); await S.cachePut('nameSeg',nameSeg);
     clearDraft(currentId); cancelAutosave(); markDirty(false); updateAutosaveInfo();
-    if($('descInline')) $('descInline').value='';
     await vClear(); versions=[]; selectedVersions.clear(); renderTimeline();
-    setStatus('已提交到远端','ok'); showToast('已保存到远端');
-  }catch(e){ setStatus('✗ '+e.message,'err'); }
-  finally{ $('btnSave').disabled=false; }
+    setStatus('已提交到远端','ok'); if(!opts.silent) showToast('已提交到远端');
+    return true;
+  }catch(e){ setStatus('✗ '+e.message,'err'); return false; }
 }
-$('btnSave').onclick=save;
 
-async function sync(){
-  if(!state) return;
-  $('btnSync').disabled=true; setStatus('拉取远端…','warn');
-  try{
-    const remote=await S.remoteNotes(token);
-    const local=stateToNotes();
-    const merged=Object.assign({},local);
-    const newCloud={};
-    let pulled=0;
-    for(const e of remote){
-      const seg=S.segFromPath(e.path);
-      const self=await S.decryptName(seg);
-      if(!self) continue;
-      const ancestors=(self.ancestors||[]).slice();
-      const m=meta[self.id];
-      let rp;
-      if(m && m.sha===e.sha && m.path===e.path && cloudNotes[self.id]){
-        rp=cloudNotes[self.id];
-      } else {
-        const text=(await S.fetchNote(e.path)).trim();
-        const p=S.parseNote(await S.decryptText(text));
-        if(!p) continue;
-        rp={id:self.id,title:self.title,content:p.content,order:p.order,ancestors};
-        meta[self.id]={sha:e.sha,path:e.path};
-        nameSeg[self.id]=seg;
-      }
-      newCloud[self.id]=rp;
-      const l=local[self.id], c=cloudNotes[self.id];
-      const locallyChanged=l && c && (l.content!==c.content || l.title!==c.title || l.order!==c.order || JSON.stringify(l.ancestors)!==JSON.stringify(c.ancestors));
-      if(locallyChanged){
-        merged[self.id]=l;
-        if(self.id===currentId && rp.content!==l.content) openDiff(rp.content,l.content,'远端(base)','本地(最新)');
-      } else {
-        merged[self.id]=rp;
-      }
-      if(JSON.stringify(l)!==JSON.stringify(rp)) pulled++;
-    }
-    const remoteIds=new Set(Object.keys(newCloud));
-    for(const id in local){ if(!remoteIds.has(id)) merged[id]=local[id]; }
-    cloudNotes=newCloud;
-    applyNotes(merged);
-    await S.cachePut('state',state); await S.cachePut('meta',meta); await S.cachePut('cloud',cloudNotes); await S.cachePut('nameSeg',nameSeg);
-    selectNote(currentId||(state.nav[0]&&state.nav[0].id),true);
-    setStatus(pulled?('已拉取 '+pulled+' 处更新'):'已是最新','ok');
-    showToast(pulled?'已同步远端':'远端与本地一致');
-  }catch(e){ setStatus('✗ '+e.message,'err'); }
-  finally{ $('btnSync').disabled=false; }
+/* ── sync / compare panel: cloud vs local, then commit or overwrite ── */
+let syncState=null;
+const isGitSha=s=>/^[0-9a-f]{40}$/.test(String(s||''));
+function noteEqual(a,b){
+  if(!a||!b) return false;
+  return a.title===b.title && a.content===b.content && (a.order||0)===(b.order||0) && JSON.stringify(a.ancestors||[])===JSON.stringify(b.ancestors||[]);
 }
-$('btnSync').onclick=sync;
-document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){ e.preventDefault(); save(); } });
+function changedVs(x,b){
+  if(x==null && b==null) return false;
+  if(x==null || b==null) return true;
+  return !noteEqual(x,b);
+}
+async function fetchRemoteDecrypted(){
+  const remote=await S.remoteNotes(token, true);
+  const map={}, segs={}, shas={};
+  for(const e of remote){
+    const seg=S.segFromPath(e.path);
+    const info=await S.decryptName(seg);
+    if(!info) continue;
+    const m=meta[info.id];
+    let rp;
+    if(m && m.sha===e.sha && m.path===e.path && cloudNotes[info.id]) rp=cloudNotes[info.id];
+    else{
+      try{
+        const p=S.parseNote(await S.decryptText((await S.fetchNote(e.path)).trim()));
+        if(!p) continue;
+        rp={id:info.id,title:info.title,content:p.content,order:p.order,ancestors:(info.ancestors||[]).slice()};
+      }catch(err){ continue; }
+    }
+    map[info.id]=rp; segs[info.id]=seg; shas[info.id]=e.sha;
+  }
+  return {map,segs,shas};
+}
+async function openSync(){
+  if(!state){ showToast('尚未解锁或没有数据'); return; }
+  $('syncModal').classList.remove('hidden');
+  await refreshSync();
+}
+async function refreshSync(){
+  $('syncSummary').textContent='拉取远端…';
+  $('syncCommit').disabled=true; $('syncTakeRemote').disabled=true;
+  try{
+    if(!token){ const t=await idbGet(IDB_TOKEN); if(t) token=t; }
+    const {map,segs,shas}=await fetchRemoteDecrypted();
+    const local=stateToNotes();
+    const ids=new Set([...Object.keys(map),...Object.keys(local)]);
+    const items=[];
+    for(const id of ids){
+      const l=local[id], r=map[id], b=cloudNotes[id];
+      const lc=changedVs(l,b), rc=changedVs(r,b);
+      let status;
+      if(!l && !r) continue;
+      else if(l && r){
+        if(!lc && !rc) continue;      // identical to base on both sides
+        else if(lc && rc) status='conflict';
+        else if(lc) status='local';   // only local moved
+        else status='remote';         // only cloud moved
+      }
+      else if(l && !r) status=lc?'conflict':'local';  // cloud deleted
+      else status=rc?'conflict':'remote';             // local deleted
+      items.push({id,title:(l||r).title,status,local:l,remote:r,base:b});
+    }
+    const w=s=>s==='conflict'?0:s==='local'?1:s==='remote'?2:3;
+    items.sort((a,b)=>(w(a.status)-w(b.status))||String(a.title).localeCompare(String(b.title)));
+    syncState={remote:map,segs,shas,items,choices:{},selected:items[0]?items[0].id:null};
+    for(const it of items) syncState.choices[it.id]=(it.status==='remote')?'remote':'local';
+    renderSync();
+  }catch(e){
+    syncState=null;
+    $('syncList').innerHTML='<div class="sync-empty">拉取失败：'+escapeHtml(e.message)+'</div>';
+    $('syncDiffLabels').textContent=''; $('syncDiffBody').innerHTML=''; $('syncChoice').classList.add('hidden');
+    $('syncSummary').textContent='';
+  }finally{
+    $('syncCommit').disabled=false; $('syncTakeRemote').disabled=false;
+  }
+}
+function statusMeta(it){ return it.status==='conflict'?['冲突','st-diff']:it.status==='local'?['仅本地','st-local']:it.status==='remote'?['仅云端','st-remote']:['差异','st-diff']; }
+function renderSync(){
+  const el=$('syncList'); el.innerHTML='';
+  if(!syncState) return;
+  const items=syncState.items;
+  $('syncSummary').textContent=items.length?('共 '+items.length+' 项差异'):'无差异';
+  if(!items.length){
+    el.innerHTML='<div class="sync-empty">云端与本地一致，无需操作。</div>';
+    $('syncDiffLabels').textContent=''; $('syncDiffBody').innerHTML=''; $('syncChoice').classList.add('hidden');
+    return;
+  }
+  for(const it of items){
+    const row=document.createElement('div');
+    row.className='sync-item'+(it.id===syncState.selected?' sel':'');
+    const st=statusMeta(it);
+    const badge=document.createElement('span'); badge.className='st '+st[1]; badge.textContent=st[0];
+    const nm=document.createElement('span'); nm.className='nm'; nm.textContent=it.title;
+    row.appendChild(badge); row.appendChild(nm);
+    row.onclick=()=>{ syncState.selected=it.id; renderSync(); };
+    el.appendChild(row);
+  }
+  renderSyncDiff();
+}
+function renderSyncDiff(){
+  const it=syncState?syncState.items.find(x=>x.id===syncState.selected):null;
+  const body=$('syncDiffBody'); body.innerHTML='';
+  if(!it){ $('syncDiffLabels').textContent=''; $('syncChoice').classList.add('hidden'); return; }
+  const rc=it.remote?it.remote.content:'';
+  const lc=it.local?it.local.content:'';
+  $('syncDiffLabels').textContent='云端（-）→ 本地（+）  ·  '+it.title;
+  for(const l of diffLines(rc,lc)){
+    const d=document.createElement('div');
+    d.className='diff-line'+(l.t==='+'?' diff-add':l.t==='-'?' diff-del':'');
+    const sign=document.createElement('span'); sign.className='diff-sign'; sign.textContent=l.t===' '?' ':l.t;
+    d.appendChild(sign); d.appendChild(document.createTextNode(l.s)); body.appendChild(d);
+  }
+  $('syncChoice').classList.remove('hidden');
+  const val=syncState.choices[it.id]||'local';
+  document.querySelectorAll('input[name=syncChoice]').forEach(r=>{ r.checked=(r.value===val); });
+}
+document.querySelectorAll('input[name=syncChoice]').forEach(r=>r.onchange=()=>{ if(syncState&&syncState.selected) syncState.choices[syncState.selected]=r.value; });
+function syncFinalNotes(){
+  const final={};
+  const local=stateToNotes();
+  const ids=new Set([...Object.keys(syncState.remote),...Object.keys(local)]);
+  for(const id of ids){
+    const r=syncState.remote[id], l=local[id];
+    const ch=syncState.choices[id]||(r&&!l?'remote':'local');
+    if(ch==='remote'){ if(r) final[id]=r; }
+    else { if(l) final[id]=l; }
+  }
+  return final;
+}
+function adoptRemoteBase(){
+  const newMeta={};
+  for(const id in syncState.remote){
+    const path=S.pathFromSegment(syncState.segs[id]);
+    newMeta[id]={sha:isGitSha(syncState.shas[id])?syncState.shas[id]:null, path};
+  }
+  meta=newMeta;
+  nameSeg=Object.assign({},syncState.segs);
+  cloudNotes=syncState.remote;
+}
+async function syncCommit(){
+  if(!syncState) return;
+  const final=syncFinalNotes();
+  /* rebase: adopt the freshly fetched cloud as the base, lay local choices on top, push the delta */
+  adoptRemoteBase();
+  applyNotes(final);
+  renderNav();
+  const ok=await save({notes:final, desc:$('syncDesc').value.trim()});
+  if(ok){ selectNote(currentId,true); $('syncModal').classList.add('hidden'); $('syncDesc').value=''; }
+}
+async function syncTakeRemote(){
+  if(!syncState) return;
+  if(!confirm('用云端覆盖本地？本地未提交的修改与本地版本记录将丢失。')) return;
+  adoptRemoteBase();
+  applyNotes(cloudNotes);
+  await S.cachePut('state',state); await S.cachePut('meta',meta); await S.cachePut('cloud',cloudNotes); await S.cachePut('nameSeg',nameSeg);
+  await vClear(); versions=[]; selectedVersions.clear(); renderTimeline();
+  clearDraft(currentId); markDirty(false); updateAutosaveInfo();
+  selectNote(currentId||(state.nav[0]&&state.nav[0].id),true);
+  $('syncModal').classList.add('hidden');
+  showToast('已用云端覆盖本地');
+}
+$('btnSync').onclick=openSync;
+$('syncClose').onclick=()=>$('syncModal').classList.add('hidden');
+$('syncRefresh').onclick=refreshSync;
+$('syncCommit').onclick=syncCommit;
+$('syncTakeRemote').onclick=syncTakeRemote;
+$('syncModal').addEventListener('click',e=>{ if(e.target===$('syncModal')) $('syncModal').classList.add('hidden'); });
+document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){ e.preventDefault(); openSync(); } });
 
 /* theme */
 (function(){
@@ -802,7 +965,7 @@ window.addEventListener('hashchange',()=>{ const id=(location.hash||'').replace(
 function showGate(){ $('gate').classList.remove('hidden'); $('app').classList.add('hidden'); }
 async function showEditor(){
   $('gate').classList.add('hidden'); $('app').classList.remove('hidden');
-  applySaveUI(); await loadVersions();
+  await loadVersions();
   if(!state) applyNotes({});
   const id=(location.hash||'').replace(/^#\/?/,'')||(state.nav[0]&&state.nav[0].id);
   selectNote(id,true);
