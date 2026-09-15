@@ -44,8 +44,15 @@ html.dark .i-sun{display:none}
 /* ── header ── */
 .header{position:sticky;top:0;z-index:30;height:48px;display:flex;align-items:center;gap:2px;padding:0 10px;border-bottom:1px solid var(--line);background:var(--bg)}
 .brand{font-size:13px;font-weight:700;white-space:nowrap;padding:0 4px}
-.page-title{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:38vw}
+.page-title{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:0 1 auto}
 .spacer{flex:1 1 auto}
+@media(max-width:600px){
+  .brand{display:none}
+  .header{gap:0;padding:0 6px}
+  .header .icon-btn{width:34px;height:34px}
+  .header .icon-btn svg{width:18px;height:18px}
+  .page-title{font-size:11px}
+}
 
 /* ── layout ── */
 .layout{display:flex;align-items:flex-start;min-height:calc(100vh - 48px)}
