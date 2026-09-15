@@ -108,6 +108,17 @@ html.dark .pw-input{background:#0d0d0d}
 @keyframes sp{to{transform:rotate(360deg)}}
 .err{color:#e5484d}
 
+/* ── 非阻塞提示条（错误密码/乱码）：顶部下方悬浮，半透明毛玻璃，不拦截页面点击 ── */
+.notice{position:fixed;left:50%;top:58px;z-index:70;width:min(440px,calc(100vw - 24px));transform:translate(-50%,-10px);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
+.notice:not(.hidden){opacity:1;transform:translate(-50%,0)}
+.notice .card{max-width:none;background:rgba(20,20,20,.62);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-color:rgba(255,255,255,.14);color:#fff;box-shadow:0 8px 28px rgba(0,0,0,.35)}
+html:not(.dark) .notice .card{background:rgba(255,255,255,.70);border-color:rgba(0,0,0,.12);color:#111}
+.notice .card p{font-size:13px}
+.notice .card code{background:rgba(255,255,255,.14)}
+html:not(.dark) .notice .card code{background:rgba(0,0,0,.06)}
+.notice .card-actions{margin-top:12px;justify-content:flex-end}
+.notice .btn{pointer-events:auto}
+
 /* ── overlays / cards ── */
 .overlay{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:20px}
 .card{width:100%;max-width:420px;background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow)}
@@ -133,8 +144,8 @@ html.dark .pw-input{background:#0d0d0d}
 }
 
 /* ── toast (Android-style, bottom-center, non-blocking) ── */
-#toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(12px);z-index:95;max-width:calc(100vw - 32px);padding:10px 18px;border-radius:16px;background:rgba(20,20,20,.92);color:#fff;font-size:13px;line-height:1.5;text-align:center;white-space:pre-line;opacity:0;pointer-events:none;transition:opacity .22s,transform .22s}
-html.dark #toast{background:rgba(245,245,245,.94);color:#000}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(12px);z-index:95;max-width:min(420px,calc(100vw - 24px));padding:9px 16px;border-radius:14px;background:rgba(20,20,20,.58);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.12);color:#fff;font-size:12.5px;line-height:1.5;text-align:center;white-space:pre-line;opacity:0;pointer-events:none;transition:opacity .22s,transform .22s}
+html.dark #toast{background:rgba(245,245,245,.66);border-color:rgba(0,0,0,.10);color:#000}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
@@ -189,13 +200,12 @@ html.dark #toast{background:rgba(245,245,245,.94);color:#000}
 </div>
 
 <!-- Garbage / wrong-key notice -->
-<div id="garbageModal" class="hidden overlay">
+<div id="garbageModal" class="hidden notice">
   <div class="card">
     <h2><svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px"><path d="M13,13H11V7H13M13,17H11V15H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"/></svg> 检测到乱码</h2>
-    <p>解密结果为人类不可读的乱码。当前页面仅为 demo 演示，测试密钥为 <code>password</code>。</p>
-    <p style="color:var(--muted)">可点击右上角清空旧密钥后重新输入密钥。</p>
-    <p style="color:var(--muted)">涉及的技术细节可点击右上角帮助。</p>
-    <div class="card-actions"><button id="garbageClose" class="btn btn-primary">关闭</button></div>
+    <p>解密结果为人类不可读的乱码：密码错误，或数据已损坏。</p>
+    <p style="color:var(--muted)">当前为 demo 演示，测试密钥为 <code>password</code>；可点右上角帮助了解加密细节。此提示不阻挡页面操作。</p>
+    <div class="card-actions"><button id="garbageClose" class="btn btn-primary">知道了</button></div>
   </div>
 </div>
 
@@ -346,7 +356,7 @@ function showGarbage(text){
 let garbageTimer=null;
 function scheduleGarbage(){ clearTimeout(garbageTimer); garbageTimer=setTimeout(()=>{ const m=$('garbageModal'); if(m) m.classList.remove('hidden'); },2000); }
 function copyText(t){ if(navigator.clipboard&&window.isSecureContext) return navigator.clipboard.writeText(t); return new Promise((res,rej)=>{ try{ const ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); res(); }catch(e){ rej(e); } }); }
-if($('garbageClose')) $('garbageClose').onclick=async()=>{ clearTimeout(garbageTimer); $('garbageModal').classList.add('hidden'); try{ await copyText('password'); showToast('密码已复制: password'); }catch(e){ showToast('复制失败，请手动输入: password'); } };
+if($('garbageClose')) $('garbageClose').onclick=()=>{ clearTimeout(garbageTimer); $('garbageModal').classList.add('hidden'); };
 
 /* unlock */
 $('unlockForm').onsubmit=async(e)=>{
