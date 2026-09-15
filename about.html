@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>关于 Argon2id 算法</title>
+<script>
+(function(){try{var s=localStorage.getItem("en-theme")||"dark";var d=s==="dark"||(s==="system"&&window.matchMedia&&window.matchMedia("(prefers-color-scheme:dark)").matches);document.documentElement.dataset.theme=d?"dark":"light";}catch(e){}})();
+</script>
+<style>
+:root{--bg:#fff;--fg:#000;--muted:#737373;--line:#e5e5e5;--surface:#f5f5f5;--safe:#15803d}
+[data-theme=dark]{--bg:#000;--fg:#fff;--muted:#a3a3a3;--line:#333;--surface:#111;--safe:#4ade80}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;font-size:15px;line-height:1.7}
+main{max-width:44rem;margin:0 auto;padding:2.5rem 1.25rem 4rem}
+a{color:inherit}
+h1{font-size:1.6rem;margin:0 0 .25rem}
+h2{font-size:1.1rem;margin:2rem 0 .6rem}
+.muted{color:var(--muted)}
+code{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:.1em .35em;font-size:.85em}
+table{border-collapse:collapse;width:100%;font-size:.85rem;margin:.75rem 0}
+th,td{border:1px solid var(--line);padding:.4rem .6rem;text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{background:var(--surface);font-weight:600}
+tbody tr:nth-child(2n){background:var(--surface)}
+.safe{color:var(--safe);font-weight:600}
+blockquote{border-left:3px solid var(--line);margin:1rem 0;padding:.1rem 0 .1rem 1rem;color:var(--muted)}
+footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--line);font-size:.75rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <p><a href="https://n.down2.top/">← 返回加密笔记</a></p>
+
+  <h1>关于 Argon2id 算法</h1>
+  <p class="muted">加密笔记用它把口令变成 256 位密钥；本文说明为什么暴力破解不可行。</p>
+
+  <h2>要点</h2>
+  <ul>
+    <li><strong>内存硬</strong>：每次尝试都要占用 <code>m=256 MiB, t=4, p=1</code>，一次猜测就吃掉 256 MiB。</li>
+    <li><strong>并行受内存限制</strong>：同时猜 N 个口令就要 N×256 MiB；一张 80 GB 的 H100 最多约 300 路，不是无限。</li>
+    <li><strong>空间指数增长</strong>：随机密码每多一位，搜索空间 ×62。</li>
+    <li><strong>只保护强密码</strong>：Argon2 抬高每次尝试的成本，但救不了字典词与短数字。</li>
+  </ul>
+
+  <h2>破解时间估算</h2>
+  <p class="muted">随机密码，字符集 62（A–Z a–z 0–9）；平均时间 = 搜索空间 ÷ (2 × 速率)。数量级估算，非精确基准。</p>
+  <table>
+    <thead>
+      <tr><th>密码长度</th><th>单核 CPU</th><th>9950X 16 核</th><th>1× H100</th><th>1000× H100</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>8 位</td><td class="safe">173.0 万年</td><td class="safe">10.8 万年</td><td class="safe">1.2 万年</td><td>12 年</td></tr>
+      <tr><td>10 位</td><td class="safe">66.5 亿年</td><td class="safe">4.2 亿年</td><td class="safe">4,432.6 万年</td><td class="safe">4.4 万年</td></tr>
+      <tr><td>12 位</td><td class="safe">2.56×10<sup>13</sup> 年</td><td class="safe">1.60×10<sup>12</sup> 年</td><td class="safe">1,703.9 亿年</td><td class="safe">1.7 亿年</td></tr>
+      <tr><td>16 位</td><td class="safe">3.78×10<sup>20</sup> 年</td><td class="safe">2.36×10<sup>19</sup> 年</td><td class="safe">2.52×10<sup>18</sup> 年</td><td class="safe">2.52×10<sup>15</sup> 年</td></tr>
+    </tbody>
+  </table>
+
+  <h2>AES-256-CTR 与密钥校验</h2>
+  <p>正文与目录先拼成一段明文 <code>NOTESv1{...}</code>，再用 Argon2id 派生的 256 位密钥以 <strong>AES-256-CTR</strong> 加密（随机 IV，与密文一起公开存储）。</p>
+  <ul>
+    <li><strong>错误密钥也能"解密成功"</strong>：CTR 是流密码，任意 256 位密钥都能把密文解成等长字节流，不会报错——只是结果是随机乱码。</li>
+    <li><strong>如何判断密钥对错</strong>：明文开头有预定义的前 7 个字符 <code>NOTESv1</code>（magic）。解密后若前 7 字节与之完全一致，才认为密钥正确并继续解析后面的 JSON；否则判定为错误密钥，页面只显示乱码。</li>
+    <li><strong>不泄露口令</strong>：magic 是公开常量，校验只是自证，不暴露任何密钥信息；错误密钥恰好猜中 magic 的概率约 2<sup>-56</sup>，可忽略。</li>
+  </ul>
+
+  <h2>结论</h2>
+  <blockquote>10 位以上的随机密码，即便 1000 张 H100 也要数万年；12 位以上基本不可行。与其堆机器，不如换更长的随机密码。</blockquote>
+
+  <footer>
+    参数：Argon2id m=256 MiB · t=4 · p=1 · AES-256-CTR。估算假设单核 ≈2 次/秒、9950X 16 核 ≈32 次/秒、1× H100 ≈300 次/秒，按比例放大。
+  </footer>
+</main>
+</body>
+</html>
