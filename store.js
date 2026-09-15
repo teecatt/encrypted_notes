@@ -10,9 +10,12 @@ const RAW_BASE='https://raw.githubusercontent.com/'+OWNER+'/'+REPO+'/'+BRANCH+'/
 const API_BASE='https://api.github.com/repos/'+OWNER+'/'+REPO;
 const ARGON2_URL=new URL('vendor/argon2-bundled.min.js', import.meta.url).href;
 
-export let params=null, aesKey=null;
+export let params=null, aesKey=null, macKey=null;
 export const keyReady=()=>!!aesKey;
+export const macReady=()=>!!macKey;
 export const setKey=k=>{ aesKey=k; };
+export const setKeys=(k,m)=>{ aesKey=k; macKey=m||null; };
+export const getKeys=()=>({enc:aesKey,mac:macKey});
 
 export async function loadParams(){
   if(params) return params;
@@ -51,30 +54,52 @@ function rawWasm(pw){
   return new Promise((resolve,reject)=>{
     let w;
     try{
-      const code="importScripts("+JSON.stringify(ARGON2_URL)+");self.onmessage=async function(e){var d=e.data;try{var salt=new Uint8Array(d.saltHex.match(/../g).map(function(h){return parseInt(h,16)}));var res=await argon2.hash({pass:d.pass,salt:salt,time:d.t,mem:d.m,parallelism:d.p,hashLen:d.dkLen,type:2});var ck=await crypto.subtle.importKey('raw',res.hash,{name:'AES-CTR'},false,['encrypt','decrypt']);self.postMessage({ok:true,key:ck});}catch(err){self.postMessage({ok:false,error:String(err&&err.message||err)});}};";
+      const code="importScripts("+JSON.stringify(ARGON2_URL)+");self.onmessage=async function(e){var d=e.data;try{var salt=new Uint8Array(d.saltHex.match(/../g).map(function(h){return parseInt(h,16)}));var res=await argon2.hash({pass:d.pass,salt:salt,time:d.t,mem:d.m,parallelism:d.p,hashLen:d.dkLen,type:2});var ikm=await crypto.subtle.importKey('raw',res.hash,'HKDF',false,['deriveBits']);var macRaw=new Uint8Array(await crypto.subtle.deriveBits({name:'HKDF',hash:'SHA-256',salt:new Uint8Array(0),info:new TextEncoder().encode('notes-mac-v1')},ikm,256));var ck=await crypto.subtle.importKey('raw',res.hash,{name:'AES-CTR'},false,['encrypt','decrypt']);var mk=await crypto.subtle.importKey('raw',macRaw,{name:'HMAC',hash:'SHA-256'},false,['sign','verify']);self.postMessage({ok:true,enc:ck,mac:mk});}catch(err){self.postMessage({ok:false,error:String(err&&err.message||err)});}};";
       w=new Worker(URL.createObjectURL(new Blob([code],{type:'application/javascript'})));
     }catch(e){ return reject(e); }
-    w.onmessage=(e)=>{ w.terminate(); e.data.ok?resolve(e.data.key):reject(new Error(e.data.error)); };
+    w.onmessage=(e)=>{ w.terminate(); e.data.ok?resolve({enc:e.data.enc,mac:e.data.mac}):reject(new Error(e.data.error)); };
     w.onerror=(e)=>{ w.terminate(); reject(new Error(e.message||'WASM worker error')); };
     w.postMessage({pass:pw,saltHex:params.salt,t:params.time,m:params.memKiB,p:params.parallelism,dkLen:params.hashLen});
   });
 }
+async function macFromIkm(raw){
+  // 用 HKDF 从同一 IKM 派生独立的 HMAC 密钥，避免 AES 与 HMAC 复用同一密钥材料
+  const ikm=await crypto.subtle.importKey('raw',raw,'HKDF',false,['deriveBits']);
+  const macRaw=new Uint8Array(await crypto.subtle.deriveBits({name:'HKDF',hash:'SHA-256',salt:new Uint8Array(0),info:new TextEncoder().encode('notes-mac-v1')},ikm,256));
+  return crypto.subtle.importKey('raw',macRaw,{name:'HMAC',hash:'SHA-256'},false,['sign','verify']);
+}
 export async function deriveKey(pw){
   if(!params) await loadParams();
-  try{ aesKey=await rawWasm(pw); }
-  catch(e){ const raw=await rawNoble(pw); aesKey=await crypto.subtle.importKey('raw',raw,{name:'AES-CTR'},false,['encrypt','decrypt']); }
+  try{ const k=await rawWasm(pw); aesKey=k.enc; macKey=k.mac; }
+  catch(e){ const raw=await rawNoble(pw); aesKey=await crypto.subtle.importKey('raw',raw,{name:'AES-CTR'},false,['encrypt','decrypt']); macKey=await macFromIkm(raw); }
   return aesKey;
 }
 
+const concatBytes=(...arrs)=>{ const n=arrs.reduce((s,a)=>s+a.length,0); const out=new Uint8Array(n); let o=0; for(const a of arrs){ out.set(a,o); o+=a.length; } return out; };
+const V2_PREFIX='N2:', MAC_LEN=32;
+/* 新格式：'N2:' + base64(iv(16) || ct || HMAC-SHA256(iv||ct)(32))，解决 AES-CTR 无完整性校验的问题。
+   旧格式（纯 base64(iv||ct)）保持可读，历史笔记不受影响；macKey 缺失时拒绝读写新格式并提示重新解锁。 */
 export async function encryptText(text){
+  if(!macKey) throw new Error('完整性密钥未就绪：请重新输入密码解锁后再保存');
   const data=new TextEncoder().encode(text);
   const iv=crypto.getRandomValues(new Uint8Array(16));
   const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-CTR',counter:iv,length:128},aesKey,data));
-  const out=new Uint8Array(iv.length+ct.length); out.set(iv,0); out.set(ct,iv.length);
-  return bytesToB64(out);
+  const mac=new Uint8Array(await crypto.subtle.sign('HMAC',macKey,concatBytes(iv,ct)));
+  return V2_PREFIX+bytesToB64(concatBytes(iv,ct,mac));
 }
 export async function decryptText(b64){
-  const raw=b64ToBytes(b64);
+  const s=String(b64||'').trim();
+  if(s.startsWith(V2_PREFIX)){
+    if(!macKey) throw new Error('完整性密钥未就绪：请重新输入密码解锁');
+    const raw=b64ToBytes(s.slice(V2_PREFIX.length));
+    if(raw.length<16+MAC_LEN) throw new Error('密文长度异常，可能已损坏');
+    const iv=raw.slice(0,16), ct=raw.slice(16,raw.length-MAC_LEN), mac=raw.slice(raw.length-MAC_LEN);
+    const ok=await crypto.subtle.verify('HMAC',macKey,mac,concatBytes(iv,ct));
+    if(!ok) throw new Error('完整性校验失败：数据被篡改或密钥不匹配');
+    const pt=new Uint8Array(await crypto.subtle.decrypt({name:'AES-CTR',counter:iv,length:128},aesKey,ct));
+    return new TextDecoder('utf-8',{fatal:false}).decode(pt);
+  }
+  const raw=b64ToBytes(s);
   const iv=raw.slice(0,16), ct=raw.slice(16);
   const pt=new Uint8Array(await crypto.subtle.decrypt({name:'AES-CTR',counter:iv,length:128},aesKey,ct));
   return new TextDecoder('utf-8',{fatal:false}).decode(pt);

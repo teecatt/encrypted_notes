@@ -377,7 +377,7 @@ function showToast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add(
 function setStatus(msg,cls){ const s=$('statusMsg'); s.textContent=msg||''; s.className='msg '+(cls||''); }
 
 /* local key/token store (en-keys) */
-const IDB_NAME='en-keys',IDB_STORE='keys',IDB_KEY='aes',IDB_TOKEN='token';
+const IDB_NAME='en-keys',IDB_STORE='keys',IDB_KEY='aes',IDB_MAC='mac',IDB_TOKEN='token';
 function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=()=>r.result.createObjectStore(IDB_STORE); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 async function idbGet(k){ try{ const db=await idbOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }catch(e){ return null; } }
 async function idbPut(k,v){ const db=await idbOpen(); return await new Promise((res,rej)=>{ const q=db.transaction(IDB_STORE,'readwrite').objectStore(IDB_STORE).put(v,k); q.onsuccess=()=>res(); q.onerror=()=>rej(q.error); }); }
@@ -1004,7 +1004,7 @@ $('gateForm').onsubmit=async(e)=>{
       const p=S.parseNote(await S.decryptText((await S.fetchNote(remote[0].path)).trim()));
       if(!p){ $('gateMsg').textContent='密码错误或数据损坏'; btn.disabled=false; return; }
     }
-    try{ await idbPut(IDB_KEY,key); }catch(err){}
+    try{ await idbPut(IDB_KEY,key); if(S.getKeys().mac) await idbPut(IDB_MAC,S.getKeys().mac); }catch(err){}
     await fullLoad(); showEditor();
   }catch(err){ $('gateMsg').textContent='失败：'+err.message; btn.disabled=false; }
 };
@@ -1013,7 +1013,8 @@ $('gateForm').onsubmit=async(e)=>{
   try{
     const k=await idbGet(IDB_KEY);
     if(!k){ showGate(); return; }
-    S.setKey(k);
+    const m=await idbGet(IDB_MAC);
+    S.setKeys(k,m);
     const t=await idbGet(IDB_TOKEN); if(t) token=t;
     const [cmeta,ccloud,cns,cached,schema]=await Promise.all([
       S.cacheGet('meta'), S.cacheGet('cloud'), S.cacheGet('nameSeg'), S.cacheGet('state'), S.cacheGet('schema')
