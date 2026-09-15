@@ -150,6 +150,10 @@ html:not(.dark) .notice .card code{background:rgba(0,0,0,.06)}
   .editor-card{border:1px solid var(--line);border-radius:16px;overflow:hidden;max-height:100%}
 }
 
+/* ── 页脚：最近构建（跟踪笔记仓最后一次提交） ── */
+.app-footer{border-top:1px solid var(--line);padding:14px;text-align:center;font-size:11px;color:var(--muted)}
+.app-footer a{color:inherit;text-decoration:underline;text-underline-offset:2px}
+
 /* ── toast (Android-style, bottom-center, non-blocking) ── */
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(12px);z-index:95;max-width:min(420px,calc(100vw - 24px));padding:9px 16px;border-radius:14px;background:rgba(20,20,20,.58);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.12);color:#fff;font-size:12.5px;line-height:1.5;text-align:center;white-space:pre-line;opacity:0;pointer-events:none;transition:opacity .22s,transform .22s}
 html.dark #toast{background:rgba(245,245,245,.66);border-color:rgba(0,0,0,.10);color:#000}
@@ -204,6 +208,7 @@ html.dark #toast{background:rgba(245,245,245,.66);border-color:rgba(0,0,0,.10);c
       <article id="content" class="content"></article>
     </main>
   </div>
+  <footer class="app-footer"><span data-build="notes"></span></footer>
 </div>
 
 <!-- Garbage / wrong-key notice -->
@@ -216,6 +221,34 @@ html.dark #toast{background:rgba(245,245,245,.66);border-color:rgba(0,0,0,.10);c
   </div>
 </div>
 
+<script src="build-info.js?v=dev"></script>
+<script>
+/* 最近构建：读取部署时注入的 NOTES_BUILD，渲染到页脚，每 30s 刷新相对时间。 */
+(function(){
+  function ago(ms){
+    var s = Math.max(0, Math.floor(ms / 1000));
+    if(s < 60) return '刚刚';
+    var m = Math.floor(s / 60); if(m < 60) return m + ' 分钟前';
+    var h = Math.floor(m / 60); if(h < 24) return h + ' 小时前';
+    var d = Math.floor(h / 24); if(d < 30) return d + ' 天前';
+    var mo = Math.floor(d / 30); if(mo < 12) return mo + ' 个月前';
+    return Math.floor(mo / 12) + ' 年前';
+  }
+  function render(){
+    var el = document.querySelector('[data-build="notes"]');
+    if(!el) return;
+    var b = window.NOTES_BUILD || {};
+    if(!b.sha){ el.textContent = '最近构建：未知'; return; }
+    el.textContent = '';
+    var a = document.createElement('a');
+    a.href = 'https://github.com/teecatt/encrypted_notes/commit/' + b.sha;
+    a.target = '_blank'; a.rel = 'noopener';
+    a.textContent = '最近构建：' + ago(Date.now() - b.time) + ' · ' + String(b.sha).substring(0, 7);
+    el.appendChild(a);
+  }
+  render(); setInterval(render, 30000);
+})();
+</script>
 <script type="module">
 import * as S from './store.js?v=5';
 

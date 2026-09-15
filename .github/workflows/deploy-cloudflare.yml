@@ -29,6 +29,12 @@ jobs:
         run: |
           mkdir -p /tmp/cf_dist
           rsync -a --exclude='.git' --exclude='.github' ./ /tmp/cf_dist/
+      - name: Generate build info
+        run: |
+          read -r sha ts < <(git log -1 --format='%H %ct')
+          printf 'window.NOTES_BUILD={sha:"%s",time:%s*1000};\n' "$sha" "$ts" > /tmp/cf_dist/build-info.js
+          sed -i -E "s#build-info\.js\?[^\"']*#build-info.js?v=$sha#" /tmp/cf_dist/index.html
+
       - name: Publish to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
